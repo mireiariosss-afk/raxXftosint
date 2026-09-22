@@ -141,6 +141,11 @@ def _park_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
     return h
 
 
+@app.get("/api/index", include_in_schema=False)
+def _diag_probe() -> dict[str, str]:
+    return {"diag": "rewrite-shadow-probe", "build": "cb4a999+probe"}
+
+
 @app.get("/", include_in_schema=False)
 def root() -> dict[str, object]:
     return {
