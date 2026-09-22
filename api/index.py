@@ -9,6 +9,7 @@ Docs panel: GET /docs (Swagger UI)
 from __future__ import annotations
 
 import random
+import re
 import string
 
 import requests
@@ -38,6 +39,31 @@ PARKPLUS_AUTH = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiIsImtpZCI6InYxIn0.eyJleHAiOjE
 PARKPLUS_CLIENT_ID = "8186c1be-660f-428c-93a7-6480c2d8af66"
 PARKPLUS_CLIENT_SECRET = "hjjh0uw8c3j7vw5jgba8"
 PARKPLUS_DEVICE_ID = "b2f165731e4ecdd12ab8375b3861b3b5"
+
+# --- turtlemint (pan) - hardcoded, verified working 2026-09-22 ---
+TURTLE_BASE = "https://turtlemintloans.com/api/minterprise/v1/products/personal-loan/leads/existing-lead-by-pan"
+TURTLE_BEARER = "9164b80a95d58333dcca54bf7d109edfe0c295848217a45315536b1a47a2aa6c4fe9fb1da604604b5466723215760078"
+TURTLE_TOKEN_ID = "ODEzMDQ5NzgxNDo2MDZL"
+TURTLE_HEADERS = {
+    "accept": "*/*",
+    "accept-language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
+    "authorization": f"Bearer {TURTLE_BEARER}",
+    "content-type": "application/json",
+    "priority": "u=1, i",
+    "referer": "https://turtlemintloans.com/products/personal-loan/customer/MULTI/apply",
+    "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not=A?Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "x-broker": "turtlemint",
+    "x-partner-id": "undefined",
+    "x-provider": "signzy",
+    "x-tenant": "turtlemint",
+}
+PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
 
 app = FastAPI(
     title="raxXftosint",
@@ -161,6 +187,7 @@ def root() -> dict[str, object]:
             "gstin_to_pan": "/api/gstin-to-pan?gstin=29AAAAA0000A1Z5",
             "fastag": "/api/fastag?vehicle_number=KA01AB1234",
             "challan": "/api/challan?vehicle_number=KA01AB1234&status=PENDING",
+            "pan": "/api/pan?pan=AXDPR2606K",
             "health": "/api/health",
         },
     }
@@ -281,3 +308,33 @@ def challan_lookup(
         msg = body.get("message") if isinstance(body, dict) else "lookup failed"
         return {"status": "error", "message": msg or "lookup failed"}
     return {"status": "success", "vehicle_number": vrn, "data": body.get("data")}
+
+
+@app.get("/api/pan", tags=["pan"])
+def pan_lookup(pan: str = Query(..., min_length=10, max_length=10)) -> dict[str, object]:
+    code = pan.strip().upper()
+    if not PAN_RE.match(code):
+        return {"status": "error", "message": "Invalid PAN format (e.g. AXDPR2606K)"}
+    try:
+        r = requests.get(
+            TURTLE_BASE,
+            params={"pan": code, "tokenId": TURTLE_TOKEN_ID},
+            headers=TURTLE_HEADERS,
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as e:
+        return {"status": "error", "message": f"Upstream request failed: {e}"}
+    if r.status_code == 401:
+        return {"status": "error", "message": "Upstream auth expired (401). Token needs refresh."}
+    if r.status_code == 429:
+        return {"status": "error", "message": "Upstream rate limit (429). Try again later."}
+    try:
+        body = r.json()
+    except ValueError:
+        return {"status": "error", "message": f"Upstream non-JSON (HTTP {r.status_code})"}
+    if not isinstance(body, dict):
+        return {"status": "error", "message": "Unexpected upstream shape"}
+    data = body.get("data")
+    if not isinstance(data, dict) or not data:
+        return {"status": "error", "message": body.get("message") if isinstance(body.get("message"), str) else "No data found for this PAN"}
+    return {"status": "success", "pan": code, "data": data}

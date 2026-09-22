@@ -12,6 +12,7 @@ Docs panel: `/api/docs` (Vercel mounts the app at `/api`, no rewrites)
 | `GET /api/gstin-to-pan?gstin=29AAAAA0000A1Z5` | PAN extract |
 | `GET /api/fastag?vehicle_number=KA01AB1234` | Fastag info |
 | `GET /api/challan?vehicle_number=KA01AB1234&status=PENDING` | Challan list |
+| `GET /api/pan?pan=AXDPR2606K` | PAN info (name, dob, status) |
 | `GET /api/health` | Health |
 
 Deploy: Import this repo in Vercel -> Deploy (no env setup).
