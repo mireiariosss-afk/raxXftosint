@@ -65,9 +65,26 @@ TURTLE_HEADERS = {
 }
 PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
 
+IMSIDATA_URL = "https://imsidata.com/wp-admin/admin-ajax.php"
+IMSIDATA_HEADERS = {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
+    "origin": "https://imsidata.com",
+    "referer": "https://imsidata.com/search/",
+    "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not=A?Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "x-requested-with": "XMLHttpRequest",
+}
+PK_PHONE_RE = re.compile(r"^[0-9+\- ]{10,15}$")
+
 app = FastAPI(
     title="raxXftosint",
-    description="GSTIN + Fastag + Challan - single project, multi endpoint",
+    description="GSTIN + Fastag + Challan + PAN + PK SIM lookup - single project, multi endpoint",
     version="1.0.0",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
@@ -76,7 +93,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -188,6 +205,7 @@ def root() -> dict[str, object]:
             "fastag": "/api/fastag?vehicle_number=KA01AB1234",
             "challan": "/api/challan?vehicle_number=KA01AB1234&status=PENDING",
             "pan": "/api/pan?pan=AXDPR2606K",
+            "pk": "/api/pk?number=03359736848",
             "health": "/api/health",
         },
     }
@@ -338,3 +356,88 @@ def pan_lookup(pan: str = Query(..., min_length=10, max_length=10)) -> dict[str,
     if not isinstance(data, dict) or not data:
         return {"status": "error", "message": body.get("message") if isinstance(body.get("message"), str) else "No data found for this PAN"}
     return {"status": "success", "pan": code, "data": data}
+
+
+def _pk_search(number: str) -> dict[str, object]:
+    payload = {
+        "post_id": "413",
+        "form_id": "5e17544",
+        "referer_title": "SIM & CNIC Ownership Search",
+        "queried_id": "413",
+        "form_fields[search]": number,
+        "action": "elementor_pro_forms_send_form",
+        "referrer": "https://imsidata.com/search/",
+    }
+    last_err = "upstream failed"
+    for _ in range(2):
+        try:
+            r = requests.post(IMSIDATA_URL, data=payload, headers=IMSIDATA_HEADERS, timeout=TIMEOUT)
+        except requests.RequestException as e:
+            last_err = f"Upstream request failed: {e}"
+            continue
+        if r.status_code != 200:
+            last_err = f"Upstream HTTP {r.status_code}"
+            continue
+        try:
+            body = r.json()
+        except ValueError:
+            last_err = "Upstream non-JSON response"
+            continue
+        if not isinstance(body, dict):
+            last_err = "Unexpected upstream shape"
+            continue
+        if body.get("success") is True or "data" in body:
+            return {"ok": True, "payload": body}
+        last_err = f"Upstream error: {str(body)[:200]}"
+    return {"ok": False, "error": last_err}
+
+
+def _pk_normalize(payload: dict[str, object]) -> list[dict[str, str]]:
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        return []
+    inner = data.get("data")
+    if isinstance(inner, dict):
+        data = inner
+    results = data.get("results")
+    if not isinstance(results, list):
+        return []
+    out: list[dict[str, str]] = []
+    for rec in results:
+        if not isinstance(rec, dict):
+            continue
+        out.append({
+            "mobile": str(rec.get("MOBILE") or rec.get("mobile") or "").strip(),
+            "name": str(rec.get("NAME") or rec.get("name") or "").strip(),
+            "cnic": str(rec.get("CNIC") or rec.get("cnic") or "").strip(),
+            "address": str(rec.get("ADDRESS") or rec.get("address") or "").strip(),
+            "network": str(rec.get("NETWORK") or rec.get("network") or "").strip(),
+        })
+    return out
+
+
+@app.get("/api/pk", tags=["pk"])
+def pk_lookup_get(number: str = Query(..., min_length=10, max_length=15)) -> dict[str, object]:
+    code = number.strip().replace(" ", "").replace("-", "")
+    if not PK_PHONE_RE.match(code):
+        return {"status": "error", "message": "Invalid number format (e.g. 03359736848)"}
+    res = _pk_search(code)
+    if not res.get("ok"):
+        return {"status": "error", "message": str(res.get("error", "lookup failed"))}
+    payload = res.get("payload")
+    results = _pk_normalize(payload) if isinstance(payload, dict) else []
+    return {"status": "success", "number": code, "count": len(results), "data": results}
+
+
+@app.post("/api/pk", tags=["pk"])
+def pk_lookup_post(body: dict[str, object]) -> dict[str, object]:
+    raw = body.get("number", "")
+    code = str(raw).strip().replace(" ", "").replace("-", "")
+    if not PK_PHONE_RE.match(code):
+        return {"status": "error", "message": "Invalid number format (e.g. 03359736848)"}
+    res = _pk_search(code)
+    if not res.get("ok"):
+        return {"status": "error", "message": str(res.get("error", "lookup failed"))}
+    payload = res.get("payload")
+    results = _pk_normalize(payload) if isinstance(payload, dict) else []
+    return {"status": "success", "number": code, "count": len(results), "data": results}
