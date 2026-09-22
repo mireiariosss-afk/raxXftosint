@@ -11,6 +11,7 @@ from __future__ import annotations
 import random
 import re
 import string
+import threading
 
 import requests
 from fastapi import FastAPI, Query
@@ -81,6 +82,30 @@ IMSIDATA_HEADERS = {
     "x-requested-with": "XMLHttpRequest",
 }
 PK_PHONE_RE = re.compile(r"^[0-9+\- ]{10,15}$")
+PK_PROXY_USER = "lmzogbdu"
+PK_PROXY_PASS = "8kegavg2waeg"
+PK_PROXY_HOSTS = [
+    "31.59.20.176:6754",
+    "45.38.107.97:6014",
+    "198.105.121.200:6462",
+    "64.137.96.74:6641",
+    "198.23.243.226:6361",
+    "38.154.185.97:6370",
+    "84.247.60.125:6095",
+    "142.111.67.146:5611",
+]
+PK_TIMEOUT = 9
+_pk_lock = threading.Lock()
+_pk_idx = 0
+
+
+def _pk_proxy() -> dict[str, str]:
+    global _pk_idx
+    with _pk_lock:
+        host = PK_PROXY_HOSTS[_pk_idx % len(PK_PROXY_HOSTS)]
+        _pk_idx += 1
+    url = f"http://{PK_PROXY_USER}:{PK_PROXY_PASS}@{host}"
+    return {"http": url, "https": url}
 
 app = FastAPI(
     title="raxXftosint",
@@ -369,9 +394,9 @@ def _pk_search(number: str) -> dict[str, object]:
         "referrer": "https://imsidata.com/search/",
     }
     last_err = "upstream failed"
-    for _ in range(2):
+    for _ in range(3):
         try:
-            r = requests.post(IMSIDATA_URL, data=payload, headers=IMSIDATA_HEADERS, timeout=TIMEOUT)
+            r = requests.post(IMSIDATA_URL, data=payload, headers=IMSIDATA_HEADERS, proxies=_pk_proxy(), timeout=PK_TIMEOUT)
         except requests.RequestException as e:
             last_err = f"Upstream request failed: {e}"
             continue
