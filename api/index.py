@@ -12,6 +12,7 @@ import random
 import json
 import re
 import string
+import threading
 import time
 
 import json
@@ -87,6 +88,13 @@ PK_PHONE_RE = re.compile(r"^[0-9+\- ]{10,15}$")
 AMAZON_COOKIE = 'session-id=524-3333471-4402345; i18n-prefs=INR; ubid-acbin=523-4707979-0161653; csd-key=eyJ3YXNtVGVzdGVkIjp0cnVlLCJ3YXNtQ29tcGF0aWJsZSI6dHJ1ZSwid2ViQ3J5cHRvVGVzdGVkIjpmYWxzZSwidiI6MSwia2lkIjoiMzc0YWM2Iiwia2V5IjoiSVpZb2RER2JqTU4yMmpqL1cvc2ZaRmZCeUtBRy9hY250bGRzYkVEVEVrY3RWVTEvcENiNkUxc1RQbWVSR09GcWxFbFozaERVbEZRbDJuS0pWOFhSUTlGQ2FiYUxBVXh2eHBsVXRrYUJJM0o0OUNhQ054NXRkdFpGbWVSdU5jUVcwMVlYdlVRUTRHTGJ0SEVZa042WTREK2kyTk5kejltcWRHcTBUSG1WQ1FBbVUwRTBNYWdIK1R1anliSGtEeVhad3B0MnZUVTdqM2pEamRQaStENElMSlA2bXJBNy8yS2N1Y2ZMTXJSVmJtRE5JMzJPTGZNcEhpVGZhRUJCQ2tPMDBnSXVUWFFvd2Z5WlNYNVloSTBhNzBVeVBrNDZOM1g2N2lXciszbWZTd0tYb0l0dC9jODBEZDNFd3J0c1pjS05oNXdIUzEzaHc1STNQaklabFF4SVV3PT0ifQ==; lc-acbin=en_IN; sso-state-acbin=Xdsso|ZQHijZ6vzY7FlQCHcSd4oHpqE-e_piS6VH0yxcp2jOgS5DYe_QBSM_YbkP_rHpbU4-12WJhVadsSrHR8r08dmm_bKIumlcqQ9vWKZxv8l8h3tPD7; at-acbin=Atza|gQCmXgdvAwEBAkQHbxvxbZ3WK1Gx0CFjBis3KjY4TTeySRFIu3f_IEzx0XOUAn_GeeQqlMupQgSBSFGP667Ru2vEevt3ResY7dhyQjZizafcd15_mZZylGQmw3Y0yjnxE3mRSb0OBbKzRdRPomTAUuDS5_Zyr0qHGbRv-RwcnmDGRu0r8DltJuY-XJ-TjMplhsohKTx10ipR5sCeT1B8jYASfi9IYmUOOFfNgWh8vijFCNElYdYI1NtTZaET_-9WhWhGqfPp-JQ9HLupTQd5jAMmFRRB_lIjXKJ7Ih2f2DO8hV9SHq4QXiq08JETXDSIK3Kr00I3JZoDmKFFj7Dd0UG6QKEMiZmfClT0jf_slJ-OOroHaEfRhZHnZ5TspWY8MZ6dDhu_cHNcYZ8CWAGs0Mk1_Le2d2fV9gJIAM-zpmq71No; sess-at-acbin=60K42HpUyti0bPQ2Ne8bD0dE/bK4zc7ztkTRog168co=; sst-acbin=Sst1|PQJxS1omQzGbXvq7AZ8R3Gz0DT4vct4LEDlvDqwpvZPLMX-HWHQ1divyu_0qq3JZJkAJ0c9BMGEMsyuDhVVzT2gbyjEmakLcbcFehw3BkqIW60KObs6mty1K1KqKORg2isyPSdYFlZlVrs6wZpo43KLovPbkaz9Gh7rQZq5q4LA0ZxeP07z3sGd5oUMbPAsAB5HcECCnp2-6fIbG6i1HMyUajd5UBjs2_Ka3sSif6NUIcPnQy-krvbNgxwLVm6euVLzvJYN22OkLRzdiYzSa1M3n1SfoAvkW4-l3aB2BHxqmFrobq2zaNJ7SNV3-h12_909_JfF9IUgmjB1kVTq1nqSgZDonYJwQl9II9yiZxnsvKXHV33SlimGN9vpkslrTeloI; session-id-time=2082787201l; csm-hit=tb:s-JMMN3CY6JTFYJJ70R0K5|1790090662184&t:1790090662941&adb:adblk_no; session-token=fGAkYvhwlSCygZtM6CCJmwQHOmi3CcfbTS0UxVKXtMViC77smxg08miiD094/soOjQ+LRlv45sx1VRyX3GOi2TDZkPiweyq5JzXptbUnZXzPRChRRqBLc/nITNa5nC7okhSHVZSLRQ/hZru2H/zAnifuXxsQNtf0W+J4HB2D190WlNkJHez52q+kOPfwwUSDx9R1ZVy0QUFmOK5fPuCCxJV9wIks3jMazf8rmsxxV+uQSrIfRq3X6ky7iZyhNTnv; x-acbin="RRkQ@TTJGUuQIM9jgNS6WkZxeIYoAxRrNaujyZ@HuemU@tpGHTXFrNslCxLh89m7"; rxc=APnSMUR6RxzeZ4GerHs'
 AMAZON_URL = "https://www.amazon.in/apay/money-transfer/verify-vpa/v2"
 AMAZON_DEVICE = 'mobile-device-info=dpi:300.0|w:720|h:1600; amzn-app-ctxt=1.8%20%7B%22an%22%3A%22Amazon.com%22%2C%22av%22%3A%2230.22.0.300%22%2C%22xv%22%3A%221.16.0%22%2C%22os%22%3A%22Android%22%2C%22ov%22%3A%2215%22%2C%22cp%22%3A788760%2C%22uiv%22%3A4%2C%22ast%22%3A3%2C%22nal%22%3A%221%22%2C%22di%22%3A%7B%22pr%22%3A%22V2446iC%22%2C%22md%22%3A%22V2509%22%2C%22v%22%3A%22V2446%22%2C%22mf%22%3A%22vivo%22%2C%22dsn%22%3A%222df8901a9ca34ef48e1fc70480e942d4%22%2C%22dti%22%3A%22A1MPSLFC7L5AFK%22%2C%22ca%22%3A%22%22%2C%22ct%22%3A%22MOBILE%22%2C%22mct%22%3A13%7D%2C%22dm%22%3A%7B%22w%22%3A720%2C%22h%22%3A1600%2C%22ld%22%3A1.875%2C%22dx%22%3A265.7669982910156%2C%22dy%22%3A259.02099609375%2C%22pt%22%3A0%2C%22pb%22%3A78%7D%2C%22is%22%3A%22com.google.android.packageinstaller%22%2C%22msd%22%3A%22.amazon.in%22%7D; '
+
+DIGI_MOBILE = "7989335216"
+DIGI_PASS = "Pass@031212"
+DIGI_AMOUNT = "200"
+CASHFREE_UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36"
+_cash_lock = threading.Lock()
+_cash_cache: dict[str, object] = {"session_id": None, "created_at": 0.0, "ttl": 240}
 AMAZON_HEADERS = {
     'User-Agent': "Amazon.com/30.22.0.300 (Android/15/V2509)",
     'Accept': "application/json; charset=utf-8",
@@ -552,6 +560,7 @@ def root() -> dict[str, object]:
             "pan": "/api/pan?pan=AXDPR2606K",
             "pk": "/api/pk?number=03359736848",
             "upi": "/api/upi?upi=test@ybl",
+            "phone_to_upi": "/api/phone-to-upi?phone=7065202121",
             "health": "/api/health",
         },
     }
@@ -797,6 +806,63 @@ def _upi_verify(vpa: str) -> tuple[int, str]:
     r = requests.post(AMAZON_URL, data=json.dumps(payload), headers=h, timeout=12)
     return r.status_code, r.text
 
+
+def _cash_login_and_session() -> str:
+    s = __import__("requests").Session()
+    s.headers.update({"User-Agent": CASHFREE_UA, "Accept": "*/*"})
+    r = s.post("https://digisevapoint.com/api/auth.php", data={"mobile": DIGI_MOBILE, "password": DIGI_PASS, "action": "login"}, timeout=20)
+    r.raise_for_status()
+    data = r.json()
+    if not data.get("success"):
+        raise RuntimeError(f"login failed: {data}")
+    r2 = s.post("https://digisevapoint.com/views/add_fund.php", data={"amount": DIGI_AMOUNT}, headers={"Referer": "https://digisevapoint.com/views/dashboard.php", "Content-Type": "application/x-www-form-urlencoded", "Origin": "https://digisevapoint.com"}, timeout=20)
+    r2.raise_for_status()
+    import re as _re
+    m = _re.search(r'paymentSessionId:\s*"([^"]+)"', r2.text)
+    if not m:
+        m = _re.search(r"(session_[A-Za-z0-9_-]{20,})", r2.text)
+    if not m:
+        raise RuntimeError("payment_session_id not found")
+    return m.group(1)
+
+def _cash_get_session(force: bool = False) -> str:
+    import time as _time
+    with _cash_lock:
+        now = _time.time()
+        sid = _cash_cache.get("session_id")
+        created = float(_cash_cache.get("created_at") or 0)
+        ttl = int(_cash_cache.get("ttl") or 240)
+        if not force and sid and (now - created) < ttl:
+            return str(sid)
+        sid2 = _cash_login_and_session()
+        _cash_cache["session_id"] = sid2
+        _cash_cache["created_at"] = now
+        return sid2
+
+def _cash_lookup_vpa(phone: str, session_id: str) -> dict[str, object]:
+    import requests as _rq
+    r = _rq.get("https://api.cashfree.com/checkout/api/checkouts/instruments/vpas", params={"phone_number": phone}, cookies={"chx_session_id": session_id}, headers={"User-Agent": CASHFREE_UA, "Accept": "application/json", "Referer": "https://api.cashfree.com/checkout/", "Origin": "https://api.cashfree.com"}, timeout=20)
+    try:
+        body = r.json()
+    except Exception:
+        body = {"raw": r.text[:500]}
+    return {"http_status": r.status_code, "body": body}
+
+def _enrich_vpa_amazon(vpa: str) -> dict[str, object]:
+    code, body = _upi_verify(vpa)
+    try:
+        data = json.loads(body)
+    except Exception:
+        data = {}
+    if isinstance(data, dict) and data.get("validVpa"):
+        handle = vpa.split("@")[-1].lower() if "@" in vpa else ""
+        pinfo = PSP.get(handle, {})
+        bank_id = str(data.get("bankNameStringId") or "")
+        binfo = BANK_INFO.get(bank_id, {})
+        bank_name = binfo.get("name") or str(data.get("bankNameDisplayString") or "") or pinfo.get("bank") or "Unknown Bank"
+        return {"vpa": vpa, "upi_id": vpa, "name": data.get("recipientBankAccountName"), "bank": bank_name, "app": pinfo.get("app"), "handle": handle, "valid": True, "account_type": data.get("accountType"), "raw": data}
+    return {"vpa": vpa, "upi_id": vpa, "error": "invalid_vpa", "raw": data if isinstance(data, dict) else {}}
+
 @app.get("/api/upi", tags=["upi"])
 def upi_lookup_get(upi: str = Query(..., min_length=3)) -> dict[str, object]:
     if "@" not in upi:
@@ -836,3 +902,64 @@ def upi_lookup_post(body: dict[str, object]) -> dict[str, object]:
     if "@" not in upi:
         return {"status": "error", "message": "Invalid UPI (e.g. test@ybl)"}
     return upi_lookup_get(upi)
+
+def _do_phone_to_vpa(phone: str) -> dict[str, object]:
+    import re as _re
+    phone = _re.sub(r"\D", "", phone)
+    if len(phone) == 12 and phone.startswith("91"):
+        phone = phone[2:]
+    if len(phone) != 10:
+        return {"ok": False, "error": "invalid_phone"}
+    try:
+        sid = _cash_get_session()
+    except Exception as e:
+        return {"ok": False, "phone": phone, "error": f"digiseva_login_failed: {e}"}
+    res = _cash_lookup_vpa(phone, sid)
+    body = res.get("body")
+    if res.get("http_status") == 400 or (isinstance(body, dict) and body.get("code") in ("payment_session_id_invalid", "request_failed")):
+        try:
+            sid = _cash_get_session(force=True)
+            res = _cash_lookup_vpa(phone, sid)
+            body = res.get("body")
+        except Exception:
+            pass
+    if isinstance(body, dict) and body.get("status") == "SUCCESS":
+        vpa = body.get("vpa")
+        vpas = body.get("vpas") or ([vpa] if vpa else [])
+        vpas = [v for v in vpas if v]
+        enriched = [_enrich_vpa_amazon(v) for v in vpas]
+        primary = enriched[0] if enriched else {}
+        resp: dict[str, object] = {
+            "ok": True,
+            "phone": phone,
+            "vpa": primary.get("vpa") or vpa,
+            "holder_name": primary.get("name"),
+            "bank": primary.get("bank"),
+            "upi_app": primary.get("app"),
+            "handle": primary.get("handle"),
+            "valid": primary.get("valid"),
+            "account_type": primary.get("account_type"),
+            "raw_cashfree": body,
+            "enriched": enriched,
+        }
+        if len(vpas) > 1:
+            resp["vpa_count"] = len(vpas)
+            resp["other_vpas"] = ",".join(vpas[1:])
+        return resp
+    msg = body.get("message") if isinstance(body, dict) else "lookup_failed"
+    return {"ok": False, "phone": phone, "error": msg, "raw": body}
+
+@app.get("/api/phone-to-upi", tags=["phone-upi"])
+def phone_to_upi_get(phone: str = Query(..., min_length=10, max_length=15)) -> dict[str, object]:
+    return _do_phone_to_vpa(phone)
+
+@app.get("/api/num-to-upi", tags=["phone-upi"], include_in_schema=False)
+def num_to_upi_alias(phone: str = Query(..., min_length=10, max_length=15)) -> dict[str, object]:
+    return _do_phone_to_vpa(phone)
+
+@app.post("/api/phone-to-upi", tags=["phone-upi"])
+def phone_to_upi_post(body: dict[str, object]) -> dict[str, object]:
+    phone = str(body.get("phone") or body.get("mobile") or body.get("number") or "").strip()
+    if not phone:
+        return {"ok": False, "error": "phone required"}
+    return _do_phone_to_vpa(phone)
