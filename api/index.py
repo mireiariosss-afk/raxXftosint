@@ -141,16 +141,11 @@ def _park_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
     return h
 
 
-@app.get("/api/index", include_in_schema=False)
-def _diag_probe() -> dict[str, str]:
-    return {"diag": "rewrite-shadow-probe", "build": "cb4a999+probe"}
-
-
 @app.get("/", include_in_schema=False)
 def root() -> dict[str, object]:
     return {
         "service": "raxXftosint",
-        "docs": "/docs",
+        "docs": "/api/docs",
         "endpoints": {
             "gstin": "/api/gstin?gstinNum=21AABCF8078M2ZC",
             "search": "/api/search?keyword=flipkart",
@@ -158,7 +153,7 @@ def root() -> dict[str, object]:
             "gstin_to_pan": "/api/gstin-to-pan?gstin=29AAAAA0000A1Z5",
             "fastag": "/api/fastag?vehicle_number=KA01AB1234",
             "challan": "/api/challan?vehicle_number=KA01AB1234&status=PENDING",
-            "health": "/health",
+            "health": "/api/health",
         },
     }
 
