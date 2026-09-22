@@ -39,7 +39,14 @@ PARKPLUS_CLIENT_ID = "8186c1be-660f-428c-93a7-6480c2d8af66"
 PARKPLUS_CLIENT_SECRET = "hjjh0uw8c3j7vw5jgba8"
 PARKPLUS_DEVICE_ID = "b2f165731e4ecdd12ab8375b3861b3b5"
 
-app = FastAPI(title="raxXftosint", description="GSTIN + Fastag + Challan - single project, multi endpoint", version="1.0.0")
+app = FastAPI(
+    title="raxXftosint",
+    description="GSTIN + Fastag + Challan - single project, multi endpoint",
+    version="1.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -142,6 +149,7 @@ def _park_headers(extra: dict[str, str] | None = None) -> dict[str, str]:
 
 
 @app.get("/", include_in_schema=False)
+@app.get("/api", include_in_schema=False)
 def root() -> dict[str, object]:
     return {
         "service": "raxXftosint",
@@ -159,11 +167,13 @@ def root() -> dict[str, object]:
 
 
 @app.get("/home", include_in_schema=False)
+@app.get("/api/home", include_in_schema=False)
 def home_redirect() -> RedirectResponse:
-    return RedirectResponse(url="/docs")
+    return RedirectResponse(url="/api/docs")
 
 
 @app.get("/health")
+@app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
