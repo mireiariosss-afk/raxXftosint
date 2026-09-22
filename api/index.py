@@ -11,6 +11,7 @@ from __future__ import annotations
 import random
 import re
 import string
+import time
 
 import requests
 from fastapi import FastAPI, Query
@@ -369,9 +370,11 @@ def _pk_search(number: str) -> dict[str, object]:
         "referrer": "https://imsidata.com/search/",
     }
     last_err = "upstream failed"
-    for _ in range(2):
+    for attempt in range(3):
+        if attempt:
+            time.sleep(attempt * 2)
         try:
-            r = requests.post(IMSIDATA_URL, data=payload, headers=IMSIDATA_HEADERS, timeout=TIMEOUT)
+            r = requests.post(IMSIDATA_URL, data=payload, headers=IMSIDATA_HEADERS, timeout=8)
         except requests.RequestException as e:
             last_err = f"Upstream request failed: {e}"
             continue
