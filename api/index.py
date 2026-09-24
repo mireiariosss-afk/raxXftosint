@@ -968,12 +968,15 @@ def phone_to_upi_post(body: dict[str, object]) -> dict[str, object]:
 def _jp_headers(referer: str = "https://web.justpolicy.in/car-insurance/?type=rollover") -> dict[str, str]:
     return {
         "Host": "web.justpolicy.in",
+        "Connection": "keep-alive",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "*/*",
         "Referer": referer,
         "Accept-Language": "en-US,en;q=0.9",
         "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
+        "DNT": "1",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
     }
 
 def _jp_unwrap(data: object) -> object:
