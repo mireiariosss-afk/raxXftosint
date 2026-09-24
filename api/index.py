@@ -561,6 +561,7 @@ def root() -> dict[str, object]:
             "pk": "/api/pk?number=03359736848",
             "upi": "/api/upi?upi=test@ybl",
             "phone_to_upi": "/api/phone-to-upi?phone=7065202121",
+            "vehicle": "/api/vehicle?rc=DL8CAF5030",
             "health": "/api/health",
         },
     }
@@ -963,3 +964,77 @@ def phone_to_upi_post(body: dict[str, object]) -> dict[str, object]:
     if not phone:
         return {"ok": False, "error": "phone required"}
     return _do_phone_to_vpa(phone)
+
+def _jp_headers(referer: str = "https://web.justpolicy.in/car-insurance/?type=rollover") -> dict[str, str]:
+    return {
+        "Host": "web.justpolicy.in",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "*/*",
+        "Referer": referer,
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+    }
+
+def _jp_unwrap(data: object) -> object:
+    while isinstance(data, dict) and "data" in data and len(data) == 1:
+        data = data["data"]
+    if isinstance(data, dict) and "data" in data:
+        inner = data["data"]
+        extra = {k: v for k, v in data.items() if k != "data"}
+        inner = _jp_unwrap(inner)
+        if isinstance(inner, dict):
+            return {**inner, **extra}
+        return inner
+    return data
+
+def _jp_clean(data: object) -> object:
+    if isinstance(data, dict):
+        out: dict[str, object] = {}
+        for k, v in data.items():
+            if k in ("mmvResponse", "blacklistDetails", "blacklistStatus", "dbResult", "partialData"):
+                continue
+            if v is not None and v != "" and v != [] and v != "NA":
+                out[k] = _jp_clean(v)
+        return out
+    if isinstance(data, list):
+        return [_jp_clean(x) for x in data if x not in ("", None, "NA")]
+    return data
+
+def _fetch_vehicle(rc: str) -> dict[str, object]:
+    rc = rc.upper().strip()
+    try:
+        s = __import__("requests").Session()
+        r = s.get("https://web.justpolicy.in/car-insurance/?type=rollover", headers=_jp_headers(), timeout=10)
+        if r.status_code != 200 or not s.cookies.get("PHPSESSID"):
+            return {"error": "session_failed", "status": r.status_code}
+        url = f"https://web.justpolicy.in/php-vahaan/service.php/?action=VAHAAN_DETAILS&reg_number={rc}&type=rc"
+        r2 = s.get(url, headers=_jp_headers(f"https://web.justpolicy.in/car-insurance/?reg_no={rc}"), timeout=12)
+        if r2.status_code != 200:
+            return {"error": f"upstream {r2.status_code}", "raw": r2.text[:300]}
+        import json as _json
+        try:
+            parsed = _json.loads(r2.text)
+        except Exception:
+            return {"error": "non_json", "raw": r2.text[:500]}
+        flat = _jp_unwrap(parsed)
+        cleaned = _jp_clean(flat)
+        if isinstance(cleaned, dict) and cleaned.get("regNo"):
+            return {"data": cleaned}
+        if isinstance(cleaned, dict) and cleaned:
+            return {"data": cleaned}
+        return {"error": "no_data", "raw": cleaned}
+    except Exception as e:
+        return {"error": str(e)[:200]}
+
+@app.get("/api/vehicle", tags=["vehicle"])
+def vehicle_lookup(rc: str = Query(..., min_length=4, description="RC number e.g. DL8CAF5030")) -> dict[str, object]:
+    rc = rc.upper().strip()
+    res = _fetch_vehicle(rc)
+    if "error" in res:
+        return {"status": "error", "rc": rc, "message": res.get("error"), "raw": res.get("raw")}
+    return {"status": "success", "rc": rc, "data": res.get("data")}
+
+@app.get("/api/rc", tags=["vehicle"], include_in_schema=False)
+def rc_alias(rc: str = Query(..., min_length=4)) -> dict[str, object]:
+    return vehicle_lookup(rc)
