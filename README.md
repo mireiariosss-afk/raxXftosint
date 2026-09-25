@@ -15,6 +15,9 @@ Docs panel: `/api/docs` (Vercel mounts the app at `/api`, no rewrites)
 | `GET /api/pan?pan=AXDPR2606K` | PAN info (name, dob, status) |
 | `GET /api/pk?number=03359736848` | PK SIM/CNIC info (name, cnic, network) |
 | `POST /api/pk` `{"number":"03359736848"}` | PK SIM/CNIC info (JSON body) |
+| `GET /api/phone-to-upi?phone=8449171549` | Phone to VPA + full UPI/bank details |
+| `GET /api/num-to-upi?phone=8449171549` | Alias for phone-to-upi |
+| `GET /api/dl?dlno=DL1234567890&dob=YYYY-MM-DD` | Read-only driving-licence lookup |
 | `GET /api/health` | Health |
 
 Deploy: Import this repo in Vercel -> Deploy (no env setup).
