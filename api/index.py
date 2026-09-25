@@ -892,7 +892,7 @@ def _upi_info(vpa: str, data: dict[str, object] | None = None) -> dict[str, obje
         "bank_code": bank_code,
         "bank_type": bank_info.get("type", "Unknown"),
         "bank_ifsc_prefix": bank.get("ifsc_prefix"),
-        "ifsc": bank_info.get("ifsc"),
+        "ifsc": data.get("ifsc") or data.get("IFSC") or data.get("bankIfsc"),
         "app": psp.get("app"),
         "upi_app": psp.get("app"),
         "handle_bank": psp.get("bank"),
