@@ -94,7 +94,7 @@ DIGI_PASS = "yadab221"
 DIGI_AMOUNT = "200"
 CASHFREE_UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36"
 _cash_lock = threading.Lock()
-_cash_cache: dict[str, object] = {"session_id": None, "created_at": 0.0, "ttl": 240}
+_cash_cache: dict[str, str | float] = {"session_id": "", "created_at": 0.0, "ttl": 240}
 AMAZON_HEADERS = {
     'User-Agent': "Amazon.com/30.22.0.300 (Android/15/V2509)",
     'Accept': "application/json; charset=utf-8",
@@ -849,53 +849,68 @@ def _cash_lookup_vpa(phone: str, session_id: str) -> dict[str, object]:
         body = {"raw": r.text[:500]}
     return {"http_status": r.status_code, "body": body}
 
+def _upi_info(vpa: str, data: dict[str, object] | None = None) -> dict[str, object]:
+    if data is None:
+        _, body = _upi_verify(vpa)
+        try:
+            parsed = json.loads(body)
+        except ValueError:
+            parsed = {}
+        data = parsed if isinstance(parsed, dict) else {}
+    username, _, handle = vpa.lower().partition("@")
+    if not handle or not data.get("validVpa"):
+        return {
+            "status": "error",
+            "vpa": vpa,
+            "upi_id": vpa,
+            "message": data.get("gatewayResponseMessage") or "Invalid or non-existent UPI",
+            "raw_amazon_response": data,
+        }
+    bank_id = str(data.get("bankNameStringId") or "")
+    bank_code = next((part.upper() for part in re.findall(r"[A-Z]+", bank_id.upper()) if part.upper() in BID), None)
+    bank = BID.get(bank_code or "", {})
+    bank_info = BANK_INFO.get(bank_id, {})
+    psp = PSP.get(handle, {})
+    bank_name = str(bank.get("name") or bank_info.get("name") or data.get("bankNameDisplayString") or psp.get("bank") or "Unknown Bank")
+    holder_name = data.get("recipientBankAccountName")
+    merchant = data.get("isMerchant", data.get("merchant", False))
+    merchant_verified = data.get("isMerchantVerified", data.get("merchantVerified", False))
+    return {
+        "status": "success",
+        "vpa": vpa,
+        "upi_id": vpa,
+        "name": holder_name,
+        "holder_name": holder_name,
+        "username": username,
+        "handle": handle,
+        "valid": data.get("validVpa", False),
+        "account_type": data.get("accountType"),
+        "bank": bank_name,
+        "bank_id": bank_id,
+        "bank_code": bank_code,
+        "bank_type": bank_info.get("type", "Unknown"),
+        "bank_ifsc_prefix": bank.get("ifsc_prefix"),
+        "ifsc": bank_info.get("ifsc"),
+        "app": psp.get("app"),
+        "upi_app": psp.get("app"),
+        "handle_bank": psp.get("bank"),
+        "merchant": merchant,
+        "merchant_verified": merchant_verified,
+        "denied_account_types": data.get("deniedAccountTypes", []),
+        "violations": data.get("violations", []),
+        "raw_amazon_response": data,
+    }
+
+
 def _enrich_vpa_amazon(vpa: str) -> dict[str, object]:
-    code, body = _upi_verify(vpa)
-    try:
-        data = json.loads(body)
-    except Exception:
-        data = {}
-    if isinstance(data, dict) and data.get("validVpa"):
-        handle = vpa.split("@")[-1].lower() if "@" in vpa else ""
-        pinfo = PSP.get(handle, {})
-        bank_id = str(data.get("bankNameStringId") or "")
-        binfo = BANK_INFO.get(bank_id, {})
-        bank_name = binfo.get("name") or str(data.get("bankNameDisplayString") or "") or pinfo.get("bank") or "Unknown Bank"
-        return {"vpa": vpa, "upi_id": vpa, "name": data.get("recipientBankAccountName"), "bank": bank_name, "app": pinfo.get("app"), "handle": handle, "valid": True, "account_type": data.get("accountType"), "raw": data}
-    return {"vpa": vpa, "upi_id": vpa, "error": "invalid_vpa", "raw": data if isinstance(data, dict) else {}}
+    return _upi_info(vpa)
+
 
 @app.get("/api/upi", tags=["upi"])
 def upi_lookup_get(upi: str = Query(..., min_length=3)) -> dict[str, object]:
     if "@" not in upi:
         return {"status": "error", "message": "Invalid UPI (e.g. test@ybl)"}
-    username, handle = upi.lower().split("@", 1)
-    code, body = _upi_verify(upi)
-    try:
-        data = json.loads(body)
-    except Exception:
-        data = {}
-    if not isinstance(data, dict) or not data.get("validVpa"):
-        return {"status": "error", "message": data.get("gatewayResponseMessage") or "Invalid or non-existent UPI", "upi_id": upi, "raw": data}
-    bank_id = str(data.get("bankNameStringId") or "")
-    binfo = BANK_INFO.get(bank_id, {})
-    pinfo = PSP.get(handle, {})
-    bank_name = binfo.get("name") or str(data.get("bankNameDisplayString") or "") or pinfo.get("bank") or "Unknown Bank"
-    result: dict[str, object] = {
-        "status": "success",
-        "upi_id": upi,
-        "username": username,
-        "handle": handle,
-        "valid": data.get("validVpa"),
-        "name": data.get("recipientBankAccountName"),
-        "account_type": data.get("accountType"),
-        "bank": bank_name,
-        "bank_id": bank_id,
-        "app": pinfo.get("app"),
-        "handle_bank": pinfo.get("bank"),
-        "is_merchant": data.get("isMerchant"),
-        "raw": data,
-    }
-    return result
+    return _upi_info(upi)
 
 @app.post("/api/upi", tags=["upi"])
 def upi_lookup_post(body: dict[str, object]) -> dict[str, object]:
@@ -931,18 +946,20 @@ def _do_phone_to_vpa(phone: str) -> dict[str, object]:
         enriched = [_enrich_vpa_amazon(v) for v in vpas]
         primary = enriched[0] if enriched else {}
         resp: dict[str, object] = {
+            key: value
+            for key, value in primary.items()
+            if key != "status"
+        }
+        resp.update({
             "ok": True,
             "phone": phone,
             "vpa": primary.get("vpa") or vpa,
-            "holder_name": primary.get("name"),
-            "bank": primary.get("bank"),
-            "upi_app": primary.get("app"),
-            "handle": primary.get("handle"),
-            "valid": primary.get("valid"),
-            "account_type": primary.get("account_type"),
+            "holder_name": primary.get("holder_name"),
+            "upi_app": primary.get("upi_app"),
             "raw_cashfree": body,
+            "upi_info": primary,
             "enriched": enriched,
-        }
+        })
         if len(vpas) > 1:
             resp["vpa_count"] = len(vpas)
             resp["other_vpas"] = ",".join(vpas[1:])
