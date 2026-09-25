@@ -973,7 +973,7 @@ def _jp_headers(referer: str = "https://web.justpolicy.in/car-insurance/?type=ro
         "Accept": "*/*",
         "Referer": referer,
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate",
         "DNT": "1",
         "Sec-Fetch-Mode": "cors",
         "Sec-Fetch-Site": "same-origin",
