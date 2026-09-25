@@ -1010,16 +1010,16 @@ def _fetch_vehicle(rc: str) -> dict[str, object]:
         s = __import__("requests").Session()
         r = s.get("https://web.justpolicy.in/car-insurance/?type=rollover", headers=_jp_headers(), timeout=10)
         if r.status_code != 200 or not s.cookies.get("PHPSESSID"):
-            return {"error": "session_failed", "status": r.status_code}
+            return {"error": "session_failed", "status": r.status_code, "raw": r.text[:300], "cookies": str(s.cookies.get_dict())}
         url = f"https://web.justpolicy.in/php-vahaan/service.php/?action=VAHAAN_DETAILS&reg_number={rc}&type=rc"
         r2 = s.get(url, headers=_jp_headers(f"https://web.justpolicy.in/car-insurance/?reg_no={rc}"), timeout=12)
         if r2.status_code != 200:
-            return {"error": f"upstream {r2.status_code}", "raw": r2.text[:300]}
+            return {"error": f"upstream {r2.status_code}", "raw": r2.text[:500], "headers": dict(r2.headers)}
         import json as _json
         try:
             parsed = _json.loads(r2.text)
         except Exception:
-            return {"error": "non_json", "raw": r2.text[:500]}
+            return {"error": "non_json", "raw": r2.text[:500], "status2": r2.status_code, "headers": dict(r2.headers), "len": len(r2.text)}
         flat = _jp_unwrap(parsed)
         cleaned = _jp_clean(flat)
         if isinstance(cleaned, dict) and cleaned.get("regNo"):
