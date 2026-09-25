@@ -89,8 +89,8 @@ AMAZON_COOKIE = 'session-id=524-3333471-4402345; i18n-prefs=INR; ubid-acbin=523-
 AMAZON_URL = "https://www.amazon.in/apay/money-transfer/verify-vpa/v2"
 AMAZON_DEVICE = 'mobile-device-info=dpi:300.0|w:720|h:1600; amzn-app-ctxt=1.8%20%7B%22an%22%3A%22Amazon.com%22%2C%22av%22%3A%2230.22.0.300%22%2C%22xv%22%3A%221.16.0%22%2C%22os%22%3A%22Android%22%2C%22ov%22%3A%2215%22%2C%22cp%22%3A788760%2C%22uiv%22%3A4%2C%22ast%22%3A3%2C%22nal%22%3A%221%22%2C%22di%22%3A%7B%22pr%22%3A%22V2446iC%22%2C%22md%22%3A%22V2509%22%2C%22v%22%3A%22V2446%22%2C%22mf%22%3A%22vivo%22%2C%22dsn%22%3A%222df8901a9ca34ef48e1fc70480e942d4%22%2C%22dti%22%3A%22A1MPSLFC7L5AFK%22%2C%22ca%22%3A%22%22%2C%22ct%22%3A%22MOBILE%22%2C%22mct%22%3A13%7D%2C%22dm%22%3A%7B%22w%22%3A720%2C%22h%22%3A1600%2C%22ld%22%3A1.875%2C%22dx%22%3A265.7669982910156%2C%22dy%22%3A259.02099609375%2C%22pt%22%3A0%2C%22pb%22%3A78%7D%2C%22is%22%3A%22com.google.android.packageinstaller%22%2C%22msd%22%3A%22.amazon.in%22%7D; '
 
-DIGI_MOBILE = "7989335216"
-DIGI_PASS = "Pass@031212"
+DIGI_MOBILE = "9876643332"
+DIGI_PASS = "yadab221"
 DIGI_AMOUNT = "200"
 CASHFREE_UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Mobile Safari/537.36"
 _cash_lock = threading.Lock()
