@@ -71,6 +71,27 @@ TURTLE_HEADERS = {
 }
 PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
 
+SPINNY_URL = "https://api.spinny.com/v3/api/vehicle/full-pan-details/"
+SPINNY_COOKIE = "sessionid=7l57gfb45f2dd99swehjb1npxagplkg6; platform=mweb_android; _ga=GA1.1.805084276.1789365900"
+SPINNY_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36",
+    "Accept-Encoding": "gzip, deflate",
+    "Content-Type": "application/json",
+    "sec-ch-ua-platform": '"Android"',
+    "sec-ch-ua": '"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"',
+    "anonymous-id": "805084276.1789365900",
+    "sec-ch-ua-mobile": "?1",
+    "platform": "mweb_android",
+    "origin": "https://www.spinny.com",
+    "sec-fetch-site": "same-site",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-dest": "empty",
+    "referer": "https://www.spinny.com/",
+    "accept-language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
+    "priority": "u=1, i",
+    "Cookie": SPINNY_COOKIE,
+}
+
 IMSIDATA_URL = "https://imsidata.com/wp-admin/admin-ajax.php"
 IMSIDATA_HEADERS = {
     "accept": "application/json, text/javascript, */*; q=0.01",
@@ -560,6 +581,7 @@ def root() -> dict[str, object]:
             "fastag": "/api/fastag?vehicle_number=KA01AB1234",
             "challan": "/api/challan?vehicle_number=KA01AB1234&status=PENDING",
             "pan": "/api/pan?pan=AXDPR2606K",
+            "spinny_pan": "/api/spinny-pan?pan=BBGPP5787F",
             "pk": "/api/pk?number=03359736848",
             "upi": "/api/upi?upi=test@ybl",
             "phone_to_upi": "/api/phone-to-upi?phone=7065202121",
@@ -714,6 +736,43 @@ def pan_lookup(pan: str = Query(..., min_length=10, max_length=10)) -> dict[str,
     if not isinstance(data, dict) or not data:
         return {"status": "error", "message": body.get("message") if isinstance(body.get("message"), str) else "No data found for this PAN"}
     return {"status": "success", "pan": code, "data": data}
+
+
+@app.get("/api/spinny-pan", tags=["pan"])
+def spinny_pan_lookup(pan: str = Query(..., min_length=10, max_length=10)) -> dict[str, object]:
+    code = pan.strip().upper()
+    if not PAN_RE.match(code):
+        return {"status": "error", "message": "Invalid PAN format (e.g. BBGPP5787F)"}
+    try:
+        response = requests.post(
+            SPINNY_URL,
+            params={"pan_number": code, "source": "used-car-loans"},
+            data=json.dumps({}),
+            headers=SPINNY_HEADERS,
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        return {"status": "error", "message": f"Upstream request failed: {exc}"}
+    if response.status_code == 401:
+        return {"status": "error", "message": "Upstream session expired (401). Spinny cookie needs refresh."}
+    if response.status_code == 429:
+        return {"status": "error", "message": "Upstream rate limit (429). Try again later."}
+    try:
+        body = response.json()
+    except ValueError:
+        return {"status": "error", "message": f"Upstream non-JSON (HTTP {response.status_code})"}
+    if not isinstance(body, dict) or not body.get("ok") or not body.get("is_success"):
+        message = body.get("error") if isinstance(body, dict) else "Spinny lookup failed"
+        return {"status": "error", "message": message or "Spinny lookup failed"}
+    data = body.get("data")
+    if not isinstance(data, dict) or not data.get("pan_number"):
+        return {"status": "error", "message": "No data found for this PAN"}
+    return {"status": "success", "pan": code, "data": data}
+
+
+@app.get("/api/pan-spinny", tags=["pan"], include_in_schema=False)
+def pan_spinny_alias(pan: str = Query(..., min_length=10, max_length=10)) -> dict[str, object]:
+    return spinny_pan_lookup(pan)
 
 
 def _pk_search(number: str) -> dict[str, object]:

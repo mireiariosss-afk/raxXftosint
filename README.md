@@ -13,6 +13,7 @@ Docs panel: `/api/docs` (Vercel mounts the app at `/api`, no rewrites)
 | `GET /api/fastag?vehicle_number=KA01AB1234` | Fastag info |
 | `GET /api/challan?vehicle_number=KA01AB1234&status=PENDING` | Challan list |
 | `GET /api/pan?pan=AXDPR2606K` | PAN info (name, dob, status) |
+| `GET /api/spinny-pan?pan=BBGPP5787F` | Spinny PAN info (name, DOB, PAN status) |
 | `GET /api/pk?number=03359736848` | PK SIM/CNIC info (name, cnic, network) |
 | `POST /api/pk` `{"number":"03359736848"}` | PK SIM/CNIC info (JSON body) |
 | `GET /api/phone-to-upi?phone=8449171549` | Phone to VPA + full UPI/bank details |
