@@ -15,6 +15,7 @@ import re
 import string
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from Crypto.Cipher import AES
@@ -91,6 +92,26 @@ SPINNY_HEADERS = {
     "priority": "u=1, i",
     "Cookie": SPINNY_COOKIE,
 }
+
+APEX_BASE = "https://apex.renewbuyinsurance.com"
+APEX_MOBILE = "9361046680"
+APEX_HEADERS = {
+    "accept": "application/json, text/plain, */*",
+    "accept-language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
+    "authorization": "null",
+    "priority": "u=1, i",
+    "sec-ch-ua": '"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+}
+APEX_COMMERCIAL_HEADERS = {
+    key: value for key, value in APEX_HEADERS.items() if key != "authorization"
+}
+APEX_COMMERCIAL_HEADERS["referer"] = "https://apex.renewbuyinsurance.com/cv/"
 
 IMSIDATA_URL = "https://imsidata.com/wp-admin/admin-ajax.php"
 IMSIDATA_HEADERS = {
@@ -582,6 +603,7 @@ def root() -> dict[str, object]:
             "challan": "/api/challan?vehicle_number=KA01AB1234&status=PENDING",
             "pan": "/api/pan?pan=AXDPR2606K",
             "spinny_pan": "/api/spinny-pan?pan=BBGPP5787F",
+            "rc_lookup": "/api/rc-lookup?rc=DL-2C-AF-4984",
             "pk": "/api/pk?number=03359736848",
             "upi": "/api/upi?upi=test@ybl",
             "phone_to_upi": "/api/phone-to-upi?phone=7065202121",
@@ -773,6 +795,99 @@ def spinny_pan_lookup(pan: str = Query(..., min_length=10, max_length=10)) -> di
 @app.get("/api/pan-spinny", tags=["pan"], include_in_schema=False)
 def pan_spinny_alias(pan: str = Query(..., min_length=10, max_length=10)) -> dict[str, object]:
     return spinny_pan_lookup(pan)
+
+
+def _apex_extract(payload: object) -> object | None:
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("status") is True and isinstance(payload.get("vaahan_details"), dict):
+        return payload["vaahan_details"]
+    if any(payload.get(key) for key in ("chassis_number", "engine_number", "rb_rto_code")):
+        return payload
+    meta = payload.get("meta_data")
+    if isinstance(meta, dict):
+        signzy = meta.get("signzy_response")
+        if isinstance(signzy, dict) and isinstance(signzy.get("result"), dict):
+            return signzy["result"]
+    return None
+
+
+def _apex_call(source: str, rc: str, mobile: str) -> tuple[str, int, object]:
+    if source == "commercial":
+        url = f"{APEX_BASE}/cv/api/v1/vaahan/registration_number/"
+        params = {"regn_no": rc}
+        headers = APEX_COMMERCIAL_HEADERS
+    else:
+        url = f"{APEX_BASE}/api/v1/vaahan/registration_number/"
+        params = {
+            "regn_no": rc,
+            "partner_code": "",
+            "mobile_no": mobile,
+            "source": "apex",
+            "originData": "false",
+        }
+        headers = {**APEX_HEADERS, "referer": "https://apex.renewbuyinsurance.com/motor/?reg_no=KA-01-AB-12&mobile_no=9361046680&vehicle=fourWheeler"}
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=8)
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = response.text[:300]
+        return source, response.status_code, payload
+    except requests.RequestException as exc:
+        return source, 0, {"error": str(exc)[:200]}
+
+
+def _apex_category(data: object) -> str:
+    if not isinstance(data, dict):
+        return "motor"
+    if data.get("is_commercial") is True:
+        return "commercial"
+    if data.get("is_two_wheeler") is True:
+        return "bike"
+    if data.get("is_four_wheeler") is True:
+        return "car"
+    return "motor"
+
+
+def _apex_lookup(rc: str, mobile: str = APEX_MOBILE) -> dict[str, object]:
+    normalized = re.sub(r"[^A-Z0-9]", "", rc.upper())
+    if len(normalized) < 6:
+        return {"status": "error", "rc": rc, "message": "Invalid RC number"}
+    phone = re.sub(r"\D", "", mobile) or APEX_MOBILE
+    results: dict[str, tuple[int, object]] = {}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(_apex_call, source, normalized, phone) for source in ("motor", "commercial")]
+        for future in as_completed(futures):
+            source, status, payload = future.result()
+            results[source] = (status, payload)
+    for source in ("motor", "commercial"):
+        status, payload = results.get(source, (0, None))
+        data = _apex_extract(payload)
+        if status == 200 and data is not None:
+            return {
+                "status": "success",
+                "rc": normalized,
+                "matched_source": _apex_category(data),
+                "data": data,
+                "attempts": {key: value[0] for key, value in results.items()},
+            }
+    return {
+        "status": "error",
+        "rc": normalized,
+        "message": "No record found in motor or commercial lookup",
+        "attempts": {key: value[0] for key, value in results.items()},
+    }
+
+
+@app.get("/api/rc-lookup", tags=["vehicle"])
+def apex_rc_lookup(rc: str = Query(..., min_length=6, max_length=20), mobile_no: str = APEX_MOBILE) -> dict[str, object]:
+    return _apex_lookup(rc, mobile_no)
+
+
+@app.get("/api/apex-rc", tags=["vehicle"], include_in_schema=False)
+def apex_rc_alias(rc: str = Query(..., min_length=6, max_length=20), mobile_no: str = APEX_MOBILE) -> dict[str, object]:
+    return _apex_lookup(rc, mobile_no)
 
 
 def _pk_search(number: str) -> dict[str, object]:
