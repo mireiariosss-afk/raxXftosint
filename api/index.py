@@ -8,6 +8,7 @@ Docs panel: GET /docs (Swagger UI)
 """
 from __future__ import annotations
 
+import base64
 import random
 import json
 import re
@@ -15,8 +16,9 @@ import string
 import threading
 import time
 
-import json
 import requests
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import pad, unpad
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -1058,3 +1060,130 @@ def vehicle_lookup(rc: str = Query(..., min_length=4, description="RC number e.g
 @app.get("/api/rc", tags=["vehicle"], include_in_schema=False)
 def rc_alias(rc: str = Query(..., min_length=4)) -> dict[str, object]:
     return vehicle_lookup(rc)
+
+
+NAPIX_BASE_URL = "https://delhigw.napix.gov.in/nic/parivahan/"
+NAPIX_API_BASE_URL = "https://delhigw.napix.gov.in/nic/parivahan/mparivahan/wrapperapi/"
+NAPIX_CLIENT_ID = "b91c303443f61b37106750823881cd2f"
+NAPIX_CLIENT_SECRET = "de83eeeb148878ae375f28756492e8a0"
+DL_ENDPOINTS = (
+    ("getDLdetForGivenDLNumber", "sarathi/sarathiWS/ServicesOnDL/getDLdetForGivenDLNumber"),
+    ("getDLLastEndRTODetForGivenDLNumber", "sarathi/sarathiWS/ServicesOnDL/getDLLastEndRTODetForGivenDLNumber"),
+    ("getAckDetForGivenDLNumber", "sarathi/sarathiWS/ServicesOnDL/getAckDetForGivenDLNumber"),
+)
+_napix_token_cache: dict[str, str | float] = {"access_token": "", "expires_at": 0.0}
+_napix_lock = threading.Lock()
+
+
+def _napix_token() -> str:
+    with _napix_lock:
+        now = time.time()
+        token = str(_napix_token_cache.get("access_token") or "")
+        expires_at = float(_napix_token_cache.get("expires_at") or 0)
+        if token and expires_at > now + 30:
+            return token
+        response = requests.post(
+            NAPIX_BASE_URL + "oauth2/token",
+            data={
+                "grant_type": "client_credentials",
+                "scope": "napix",
+                "client_id": NAPIX_CLIENT_ID,
+                "client_secret": NAPIX_CLIENT_SECRET,
+            },
+            headers={
+                "User-Agent": "okhttp/4.9.2",
+                "Accept-Encoding": "gzip",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        access_token = payload.get("access_token")
+        if not access_token:
+            raise RuntimeError("NAPIX token response missing access_token")
+        _napix_token_cache["access_token"] = str(access_token)
+        _napix_token_cache["expires_at"] = now + int(payload.get("expires_in", 300))
+        return str(access_token)
+
+
+def _napix_key(timestamp: str) -> str:
+    return timestamp[-4:][::-1] + timestamp[:4][::-1] + "!~)#@*&^"
+
+
+def _napix_encrypt(value: str, key: str) -> str:
+    encrypted = AES.new(key.encode("utf-8"), AES.MODE_ECB).encrypt(pad(value.encode("utf-8"), 16))
+    return base64.b64encode(encrypted).decode("ascii")
+
+
+def _napix_decrypt(value: str, key: str) -> str:
+    decrypted = AES.new(key.encode("utf-8"), AES.MODE_ECB).decrypt(base64.b64decode(value))
+    return unpad(decrypted, 16).decode("utf-8")
+
+
+def _napix_post(path: str, body: dict[str, object], timeout: int = 20) -> tuple[int, object]:
+    token = _napix_token()
+    timestamp = str(int(time.time() * 1000))
+    key = _napix_key(timestamp)
+    plain = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
+    envelope = {"data": base64.b64encode(_napix_encrypt(plain, key).encode("ascii")).decode("ascii")}
+    response = requests.post(
+        NAPIX_API_BASE_URL + path,
+        json=envelope,
+        headers={
+            "User-Agent": "okhttp/4.9.2",
+            "Accept": "application/json",
+            "Content-Type": "application/json; charset=utf-8",
+            "timestamp": timestamp,
+            "Authorization": f"Bearer {token}",
+            "Param1": "abcd",
+            "Param2": "2.0.142",
+        },
+        timeout=timeout,
+    )
+    try:
+        outer = response.json()
+        encoded = outer.get("data") if isinstance(outer, dict) else None
+        if encoded:
+            decoded = _napix_decrypt(base64.b64decode(encoded).decode("ascii"), key)
+            try:
+                return response.status_code, json.loads(decoded)
+            except json.JSONDecodeError:
+                return response.status_code, decoded
+        return response.status_code, outer
+    except (ValueError, TypeError, KeyError, UnicodeDecodeError):
+        return response.status_code, response.text[:1000]
+
+
+def _dl_lookup(dl_no: str, dob: str | None = None) -> dict[str, object]:
+    number = str(dl_no or "").strip().upper()
+    if not re.fullmatch(r"[A-Z]{2}[0-9]{6,10}", number):
+        return {"status": "error", "message": "Invalid DL format (e.g. DL1234567890)"}
+    results: dict[str, object] = {"dlNo": number, "dob": dob, "endpoints": {}}
+    endpoints: dict[str, object] = {}
+    for name, path in DL_ENDPOINTS:
+        body: dict[str, object] = {"dlno": number}
+        if dob:
+            body["dob"] = dob.strip()
+        try:
+            status, response = _napix_post(path, body, timeout=25)
+        except requests.RequestException as exc:
+            status, response = 0, {"error": str(exc)[:300]}
+        endpoints[name] = {"status": status, "response": response}
+    results["endpoints"] = endpoints
+    last = endpoints.get("getDLLastEndRTODetForGivenDLNumber", {})
+    last_response = last.get("response") if isinstance(last, dict) else None
+    if isinstance(last_response, dict):
+        results["status_code"] = last_response.get("status_code")
+        results["status_desc"] = last_response.get("status_desc")
+        results["ReqStatus"] = last_response.get("ReqStatus")
+        detail = last_response.get("Result")
+        if detail:
+            results["result"] = detail
+    return {"status": "success", **results}
+
+
+@app.get("/api/dl", tags=["driving-licence"])
+def dl_lookup(dlno: str = Query(..., min_length=8, max_length=20), dob: str | None = None) -> dict[str, object]:
+    return _dl_lookup(dlno, dob)
+
