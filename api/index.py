@@ -15,6 +15,7 @@ import re
 import string
 import threading
 import time
+from typing import Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
@@ -112,6 +113,23 @@ APEX_COMMERCIAL_HEADERS = {
     key: value for key, value in APEX_HEADERS.items() if key != "authorization"
 }
 APEX_COMMERCIAL_HEADERS["referer"] = "https://apex.renewbuyinsurance.com/cv/"
+
+INSTAGRAM_GRAPHQL_URL = "https://www.instagram.com/api/graphql"
+INSTAGRAM_PROFILE_DOC_ID = "28036671149327607"
+INSTAGRAM_POSTS_DOC_ID = "34579740524958711"
+INSTAGRAM_BASE_PARAMS = "av=0&__d=www&__user=0&__a=1&__req=1&__comet_req=7&fb_api_caller_class=RelayModern&server_timestamps=true&fb_dtsg=NAfzOewFxfqzpkF9NOxaGWstkZxgi2qviM1ys9cOQ5VUDAMp1jsnHLA%3A17864863018060157%3A1789321951&jazoest=26559&lsd=gOoTMACMEyWNgSB2LeY2oY"
+INSTAGRAM_HEADERS = {
+    "accept": "*/*, application/vnd.t1c.pxr-3-1",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/x-www-form-urlencoded",
+    "origin": "https://www.instagram.com",
+    "referer": "https://www.instagram.com/",
+    "user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+    "x-csrftoken": "VLpsJR69GycdS9bmLA9E4GsPSfgBWHpg",
+    "x-ig-app-id": "1217981644879628",
+    "x-ig-max-touch-points": "1",
+    "Cookie": "datr=M1VTaify4gCWs5JxGM_3R8HA; ig_did=35683152-CCC9-4F75-94C7-D2F4CA5ECAE0; mid=alNVMwALAAGso1qZBNgzerqpKjhn; ps_l=1; ps_n=1; ds_user_id=79987677001; csrftoken=VLpsJR69GycdS9bmLA9E4GsPSfgBWHpg; sessionid=79987677001%3ACcoMJmQxGcA43i%3A1%3AAYn73Y762D13hgx3ydmrRHFfXMrobwcm0lV7kB4pyTo",
+}
 
 IMSIDATA_URL = "https://imsidata.com/wp-admin/admin-ajax.php"
 IMSIDATA_HEADERS = {
@@ -604,6 +622,7 @@ def root() -> dict[str, object]:
             "pan": "/api/pan?pan=AXDPR2606K",
             "spinny_pan": "/api/spinny-pan?pan=BBGPP5787F",
             "rc_lookup": "/api/rc-lookup?rc=DL-2C-AF-4984",
+            "instagram": "/api/instagram?username=grindtoprime",
             "pk": "/api/pk?number=03359736848",
             "upi": "/api/upi?upi=test@ybl",
             "phone_to_upi": "/api/phone-to-upi?phone=7065202121",
@@ -888,6 +907,95 @@ def apex_rc_lookup(rc: str = Query(..., min_length=6, max_length=20), mobile_no:
 @app.get("/api/apex-rc", tags=["vehicle"], include_in_schema=False)
 def apex_rc_alias(rc: str = Query(..., min_length=6, max_length=20), mobile_no: str = APEX_MOBILE) -> dict[str, object]:
     return _apex_lookup(rc, mobile_no)
+
+
+def _instagram_graphql(doc_id: str, variables: dict[str, object]) -> dict[str, Any]:
+    body = f"{INSTAGRAM_BASE_PARAMS}&doc_id={doc_id}&variables={requests.utils.quote(json.dumps(variables, separators=(',', ':')), safe='')}"
+    response = requests.post(INSTAGRAM_GRAPHQL_URL, headers=INSTAGRAM_HEADERS, data=body, timeout=15)
+    if response.status_code != 200:
+        return {"status": "error", "message": f"Instagram HTTP {response.status_code}"}
+    try:
+        payload = response.json()
+    except ValueError:
+        return {"status": "error", "message": "Instagram returned non-JSON"}
+    if not isinstance(payload, dict) or (payload.get("errors") and not payload.get("data")):
+        return {"status": "error", "message": "Instagram GraphQL error", "errors": payload.get("errors") if isinstance(payload, dict) else None}
+    return payload
+
+
+def _instagram_posts(username: str) -> list[dict[str, Any]]:
+    result = _instagram_graphql(
+        INSTAGRAM_POSTS_DOC_ID,
+        {"username": username, "data": {"count": 4, "include_relationship_info": True, "latest_besties_reel_media": True, "latest_reel_media": True}},
+    )
+    if result.get("status") == "error":
+        return []
+    connection = ((result.get("data") or {}).get("xdt_api__v1__feed__user_timeline_graphql_connection") or {})
+    posts: list[dict[str, object]] = []
+    for edge in (connection.get("edges") or [])[:4]:
+        node = edge.get("node") if isinstance(edge, dict) else None
+        if not isinstance(node, dict):
+            continue
+        caption: Any = node.get("caption") if isinstance(node.get("caption"), dict) else {}
+        image_versions: Any = node.get("image_versions2") if isinstance(node.get("image_versions2"), dict) else {}
+        candidates: Any = image_versions.get("candidates") if isinstance(image_versions.get("candidates"), list) else []
+        owner: Any = node.get("user") if isinstance(node.get("user"), dict) else node.get("owner") if isinstance(node.get("owner"), dict) else {}
+        posts.append({
+            "shortcode": node.get("code"),
+            "post_id": node.get("pk") or node.get("id"),
+            "taken_at": node.get("taken_at"),
+            "media_type": node.get("media_type"),
+            "is_video": node.get("media_type") == 2,
+            "caption": (caption or {}).get("text"),
+            "like_count": node.get("like_count"),
+            "comment_count": node.get("comment_count"),
+            "view_count": node.get("view_count"),
+            "thumbnail": candidates[0].get("url") if candidates else None,
+            "permalink": f"https://www.instagram.com/p/{node.get('code')}/" if node.get("code") else None,
+            "owner": {"username": owner.get("username"), "pk": owner.get("pk"), "id": owner.get("id")},
+        })
+    return posts
+
+
+@app.get("/api/instagram", tags=["instagram"])
+def instagram_lookup(username: str = Query(..., min_length=1, max_length=80)) -> dict[str, object]:
+    handle = username.strip().lstrip("@")
+    if not re.fullmatch(r"[A-Za-z0-9._]+", handle):
+        return {"status": "error", "message": "Invalid Instagram username"}
+    posts = _instagram_posts(handle)
+    if not posts:
+        return {"status": "error", "username": handle, "message": "No profile or posts found"}
+    owner: Any = posts[0].get("owner") if isinstance(posts[0].get("owner"), dict) else {}
+    user_id = str(owner.get("pk") or owner.get("id") or "")
+    if not user_id and isinstance(posts[0].get("post_id"), str) and "_" in str(posts[0]["post_id"]):
+        user_id = str(posts[0]["post_id"]).rsplit("_", 1)[1]
+    if not user_id:
+        return {"status": "error", "username": handle, "message": "Profile id not found"}
+    profile_result = _instagram_graphql(
+        INSTAGRAM_PROFILE_DOC_ID,
+        {"enable_integrity_filters": True, "id": user_id, "__relay_internal__pv__PolarisCannesGuardianExperienceEnabledrelayprovider": True, "__relay_internal__pv__PolarisCASB976ProfileEnabledrelayprovider": False, "__relay_internal__pv__PolarisWebSchoolsEnabledrelayprovider": False, "__relay_internal__pv__PolarisRepostsConsumptionEnabledrelayprovider": True, "__relay_internal__pv__PolarisShortDramaEnabledrelayprovider": True},
+    )
+    if profile_result.get("status") == "error":
+        return {"status": "error", "username": handle, "message": profile_result.get("message"), "recent_posts": posts}
+    user = (profile_result.get("data") or {}).get("user") or {}
+    profile = {
+        "id": user.get("id") or user.get("pk"),
+        "username": user.get("username"),
+        "full_name": user.get("full_name"),
+        "biography": user.get("biography"),
+        "followers": user.get("follower_count"),
+        "following": user.get("following_count"),
+        "media_count": user.get("media_count"),
+        "is_private": user.get("is_private"),
+        "is_verified": user.get("is_verified"),
+        "category": user.get("category"),
+        "external_url": user.get("external_url"),
+        "profile_pic_url": user.get("profile_pic_url"),
+        "address_street": user.get("address_street"),
+        "city_name": user.get("city_name"),
+        "bio_links": user.get("bio_links") or [],
+    }
+    return {"status": "success", "username": handle, "profile": profile, "recent_posts": posts, "raw_profile": user}
 
 
 def _pk_search(number: str) -> dict[str, object]:
