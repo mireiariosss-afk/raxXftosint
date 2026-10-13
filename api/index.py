@@ -25,7 +25,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 # ---- hardcoded config (no env, as requested) ----
 TIMEOUT = 12
@@ -170,6 +170,15 @@ EYECON_HEADERS = {
     "Accept-Encoding": "gzip",
     "accept-charset": "UTF-8",
     "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+    "e-auth-v": "e1",
+    "e-auth": "bcedbedd-9c89-49e6-8cc9-4dd331c49c9c",
+    "e-auth-c": "36",
+    "e-auth-k": "PgdtSBeR0MumR7fO",
+}
+EYECON_PIC_URL = "https://api.eyecon-app.com/app/pic"
+EYECON_PIC_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36",
+    "Accept-Encoding": "gzip",
     "e-auth-v": "e1",
     "e-auth": "bcedbedd-9c89-49e6-8cc9-4dd331c49c9c",
     "e-auth-c": "36",
@@ -730,6 +739,7 @@ def root() -> dict[str, object]:
             "phone_to_upi": "/api/phone-to-upi?phone=7065202121",
             "phone_to_vpa": "/api/phone-to-vpa?phone=7065202121",
             "eyecon": "/api/eyecon?number=9876643210",
+            "eyecon_pic": "/api/eyecon-pic?number=917016730537",
             "vehicle": "/api/vehicle?rc=DL8CAF5030",
             "health": "/api/health",
         },
@@ -1498,6 +1508,32 @@ def eyecon_post(body: dict[str, object]) -> dict[str, object]:
     if not number:
         return {"status": "error", "message": "Missing 'number' in JSON body"}
     return _eyecon_lookup(number)
+
+
+@app.get("/api/eyecon-pic", tags=["phone-upi"])
+def eyecon_pic(number: str = Query(..., min_length=10, max_length=13)) -> Response:
+    """Eyecon DP served directly as image (use as <img src> URL)."""
+    digits = re.sub(r"\D", "", number or "")
+    if digits.startswith("91") and len(digits) == 12:
+        cli = digits
+    elif len(digits) == 10:
+        cli = "91" + digits
+    else:
+        return JSONResponse({"status": "error", "message": "Invalid number (10 digits)."}, status_code=400)
+    try:
+        r = requests.get(
+            EYECON_PIC_URL,
+            params={"cli": cli, "is_callerid": "true", "size": "big", "type": "0",
+                    "src": "MenifaFragment", "cancelfresh": "0", "cv": EYECON_CV},
+            headers=EYECON_PIC_HEADERS,
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        return JSONResponse({"status": "error", "message": f"Upstream request failed: {exc}"}, status_code=502)
+    if r.status_code != 200 or not r.content:
+        return JSONResponse({"status": "error", "number": cli, "message": "No photo found"}, status_code=404)
+    media = (r.headers.get("Content-Type") or "image/jpeg").split(";")[0].strip()
+    return Response(content=r.content, media_type=media)
 
 @app.post("/api/phone-to-upi", tags=["phone-upi"])
 def phone_to_upi_post(body: dict[str, object]) -> dict[str, object]:
