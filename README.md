@@ -22,6 +22,7 @@ Docs panel: `/api/docs` (Vercel mounts the app at `/api`, no rewrites)
 | `GET /api/phone-to-upi?phone=8449171549` | Phone to VPA + full UPI/bank details |
 | `GET /api/num-to-upi?phone=8449171549` | Alias for phone-to-upi |
 | `GET /api/phone-to-vpa?phone=7065202121` | Phone to VPA + holder name (Amazon verify) |
+| `GET /api/eyecon?number=9876643210` | Number to name (Eyecon) |
 | `GET /api/dl?dlno=DL1234567890&dob=YYYY-MM-DD` | Read-only driving-licence lookup |
 
 Deploy: Import this repo in Vercel -> Deploy (no env setup).

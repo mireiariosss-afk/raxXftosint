@@ -161,6 +161,21 @@ AMZ_VPA_HEADERS = {
     "Cookie": AMZ_VPA_COOKIE,
 }
 
+# --- eyecon number -> name ---
+EYECON_URL = "https://api.eyecon-app.com/app/getnames.jsp"
+EYECON_CV = "vc_791_vn_4.2026.09.27.1219_a"
+EYECON_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Encoding": "gzip",
+    "accept-charset": "UTF-8",
+    "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+    "e-auth-v": "e1",
+    "e-auth": "bcedbedd-9c89-49e6-8cc9-4dd331c49c9c",
+    "e-auth-c": "36",
+    "e-auth-k": "PgdtSBeR0MumR7fO",
+}
+
 APEX_BASE = "https://apex.renewbuyinsurance.com"
 APEX_MOBILE = "9361046680"
 APEX_HEADERS = {
@@ -714,6 +729,7 @@ def root() -> dict[str, object]:
             "upi": "/api/upi?upi=test@ybl",
             "phone_to_upi": "/api/phone-to-upi?phone=7065202121",
             "phone_to_vpa": "/api/phone-to-vpa?phone=7065202121",
+            "eyecon": "/api/eyecon?number=9876643210",
             "vehicle": "/api/vehicle?rc=DL8CAF5030",
             "health": "/api/health",
         },
@@ -1439,6 +1455,49 @@ def phone_to_vpa_post(body: dict[str, object]) -> dict[str, object]:
     if not phone:
         return {"status": "error", "message": "Missing 'phone' in JSON body"}
     return _amz_phone_to_vpa(phone)
+
+
+def _eyecon_lookup(number: str) -> dict[str, object]:
+    digits = re.sub(r"\D", "", number or "")
+    if digits.startswith("91") and len(digits) == 12:
+        cli = digits
+    elif len(digits) == 10:
+        cli = "91" + digits
+    else:
+        return {"status": "error", "message": "Invalid number (10 digits, optional 91 prefix)."}
+    try:
+        r = requests.get(
+            EYECON_URL,
+            params={"cli": cli, "lang": "en", "is_callerid": "true", "is_ic": "true",
+                    "cv": EYECON_CV, "requestApi": "okHttp", "source": "MenifaFragment"},
+            headers=EYECON_HEADERS,
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        return {"status": "error", "message": f"Upstream request failed: {exc}"}
+    try:
+        body = r.json()
+    except ValueError:
+        return {"status": "error", "message": f"Upstream non-JSON (HTTP {r.status_code})"}
+    names = [e.get("name") for e in body] if isinstance(body, list) else []
+    names = [n for n in names if n]
+    if not names:
+        return {"status": "error", "number": cli, "message": "No name found", "data": body}
+    return {"status": "success", "number": cli, "names": names, "data": body}
+
+
+@app.get("/api/eyecon", tags=["phone-upi"])
+def eyecon_get(number: str = Query(..., min_length=10, max_length=13)) -> dict[str, object]:
+    """Number to name via Eyecon."""
+    return _eyecon_lookup(number)
+
+
+@app.post("/api/eyecon", tags=["phone-upi"])
+def eyecon_post(body: dict[str, object]) -> dict[str, object]:
+    number = str(body.get("number") or body.get("phone") or body.get("mobile") or "").strip()
+    if not number:
+        return {"status": "error", "message": "Missing 'number' in JSON body"}
+    return _eyecon_lookup(number)
 
 @app.post("/api/phone-to-upi", tags=["phone-upi"])
 def phone_to_upi_post(body: dict[str, object]) -> dict[str, object]:
