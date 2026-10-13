@@ -76,22 +76,26 @@ TURTLE_HEADERS = {
 PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
 
 SPINNY_URL = "https://api.spinny.com/v3/api/vehicle/full-pan-details/"
-SPINNY_COOKIE = "sessionid=7l57gfb45f2dd99swehjb1npxagplkg6; platform=mweb_android; _ga=GA1.1.805084276.1789365900"
+SPINNY_BEARER = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzk3MDI2NTk4LCJqdGkiOiIxMmRjN2RhMDg0M2U0ODIwYmU1ZDdlYmNmODFlZTljMCIsInVzZXJfaWQiOjI3NTA3MTAxfQ.u6NjlSiRVEvbi4WUyvBhFAJItpB51_MaygvDONpmPuM"
+SPINNY_ANON = "b1d91e98bf5db7906a196e94b80e95d8"
+SPINNY_COOKIE = "_gcl_au=1.1.1902898585.1791842627; platform=app_android; _ga=GA1.1.913472270.1791842630; utm_source=direct; _fbp=fb.1.1791842632275.842543053563073885; _ga_WQREN8TJ7R=GS2.1.s1791842629$o1$g1$t1791842810$j60$l0$h0"
 SPINNY_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Mobile Safari/537.36",
-    "Accept-Encoding": "gzip, deflate",
+    "User-Agent": "Mozilla/5.0 (Linux; Android 16; 23076RN4BI Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/154.0.8037.106 Mobile Safari/537.36- spinny-app_version-v13",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
     "Content-Type": "application/json",
     "sec-ch-ua-platform": '"Android"',
-    "sec-ch-ua": '"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"',
-    "anonymous-id": "805084276.1789365900",
+    "authorization": f"Bearer {SPINNY_BEARER}",
+    "sec-ch-ua": '"Chromium";v="154", "Android WebView";v="154", "Not A(Brand";v="99"',
+    "anonymous-id": SPINNY_ANON,
     "sec-ch-ua-mobile": "?1",
-    "platform": "mweb_android",
+    "platform": "app_android",
     "origin": "https://www.spinny.com",
+    "x-requested-with": "com.spinny.consumer",
     "sec-fetch-site": "same-site",
     "sec-fetch-mode": "cors",
     "sec-fetch-dest": "empty",
     "referer": "https://www.spinny.com/",
-    "accept-language": "en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7",
+    "accept-language": "en-IN,en-US;q=0.9,en;q=0.8",
     "priority": "u=1, i",
     "Cookie": SPINNY_COOKIE,
 }
