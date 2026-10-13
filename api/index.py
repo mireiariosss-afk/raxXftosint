@@ -100,6 +100,32 @@ SPINNY_HEADERS = {
     "Cookie": SPINNY_COOKIE,
 }
 
+# --- policyboss vehicle_info (raw upstream, all fields, no cleaning) ---
+PB_URL = "https://horizon.policyboss.com:5443/quote/vehicle_info_user"
+PB_SECRET = "SECRET-HZ07QRWY-JIBT-XRMQ-ZP95-J0RWP3DYRACW"
+PB_CLIENT = "CLIENT-CNTP6NYE-CU9N-DUZW-CSPI-SH1IS4DOVHB9"
+PB_SOURCE = "policyboss-1.5.6.1"
+PB_SS_ID = 208300
+PB_SESSION = "-zdyy5h45Eh8je93xjq2wwz6Dd22jqUk"
+PB_HEADERS = {
+    "Host": "horizon.policyboss.com:5443",
+    "User-Agent": "Mozilla/5.0 (Linux; Android 16; 23076RN4BI Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/154.0.8037.106 Mobile Safari/537.36",
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "sec-ch-ua-platform": '"Android"',
+    "sec-ch-ua": '"Chromium";v="154", "Android WebView";v="154", "Not A(Brand";v="99"',
+    "content-type": "application/json;charset=UTF-8",
+    "sec-ch-ua-mobile": "?1",
+    "origin": "https://www.policyboss.com",
+    "x-requested-with": "com.policyboss.policybosspro",
+    "sec-fetch-site": "same-site",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-dest": "empty",
+    "referer": "https://www.policyboss.com/",
+    "accept-language": "en-IN,en-US;q=0.9,en;q=0.8",
+    "priority": "u=1, i",
+}
+
 APEX_BASE = "https://apex.renewbuyinsurance.com"
 APEX_MOBILE = "9361046680"
 APEX_HEADERS = {
@@ -647,6 +673,7 @@ def root() -> dict[str, object]:
             "pan": "/api/pan?pan=AXDPR2606K",
             "spinny_pan": "/api/spinny-pan?pan=BBGPP5787F",
             "rc_lookup": "/api/rc-lookup?rc=DL-2C-AF-4984",
+            "policyboss": "/api/policyboss?number=MH16BZ7090",
             "instagram": "/api/instagram?username=grindtoprime",
             "pk": "/api/pk?number=03359736848",
             "upi": "/api/upi?upi=test@ybl",
@@ -932,6 +959,46 @@ def apex_rc_lookup(rc: str = Query(..., min_length=6, max_length=20), mobile_no:
 @app.get("/api/apex-rc", tags=["vehicle"], include_in_schema=False)
 def apex_rc_alias(rc: str = Query(..., min_length=6, max_length=20), mobile_no: str = APEX_MOBILE) -> dict[str, object]:
     return _apex_lookup(rc, mobile_no)
+
+
+@app.get("/api/policyboss", tags=["vehicle"])
+def policyboss_lookup(
+    number: str = Query(..., min_length=6, max_length=20),
+    product_id: int = Query(1, ge=1, le=12),
+) -> dict[str, object]:
+    """PolicyBoss vehicle info - raw upstream, all fields, no cleaning."""
+    norm = re.sub(r"[\s-]", "", number.strip()).upper()
+    if len(norm) < 6:
+        return {"status": "error", "message": "Invalid vehicle registration number"}
+    try:
+        r = requests.post(
+            PB_URL,
+            json={
+                "secret_key": PB_SECRET,
+                "client_key": PB_CLIENT,
+                "RegistrationNumber": norm,
+                "product_id": product_id,
+                "ss_id": PB_SS_ID,
+                "source": PB_SOURCE,
+                "session_id": PB_SESSION,
+                "g-recaptcha-response": "",
+            },
+            headers=PB_HEADERS,
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        return {"status": "error", "message": f"Upstream request failed: {exc}"}
+    if r.status_code == 429:
+        return {"status": "error", "message": "Upstream rate limit (429). Try again later."}
+    try:
+        body = r.json()
+    except ValueError:
+        return {"status": "error", "message": f"Upstream non-JSON (HTTP {r.status_code})"}
+    if not isinstance(body, dict):
+        return {"status": "error", "message": "Unexpected upstream shape"}
+    if body.get("Msg") == "Not Authorized":
+        return {"status": "error", "message": "Upstream not authorized. Keys/session need refresh."}
+    return {"status": "success", "number": norm, "data": body}
 
 
 def _ig_get_pk(username: str) -> tuple[str | None, int]:
