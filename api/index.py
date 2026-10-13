@@ -126,6 +126,41 @@ PB_HEADERS = {
     "priority": "u=1, i",
 }
 
+# --- amazon phone -> VPA (verify-vpa/v2, full mShop session cookie) ---
+AMZ_VPA_URL = "https://www.amazon.in/apay/money-transfer/verify-vpa/v2"
+AMZ_VPA_COOKIE = (
+    "lc-acbin=en_IN; i18n-prefs=INR; session-id=258-7630563-9326366; "
+    "ubid-acbin=257-4373178-4453824; "
+    "mobile-device-info=dpi:480.0|w:1080|h:2460; sid=; "
+    "panch-token=eyJ0IjoxNzgxODEzMzM1LCJ1bCI6W10sImlkIjoiOWFjZjZlMmNlYTAxZDQ1NjcxM2E0NzlmY2VhY2Y2ZGIiLCJ2IjoxfQ==; "
+    "sst-acbin=Sst1|PQK31nqHthwFjFpMrxdr76QVBzT7guo99WOOs2_IyjIDAYbOVI7pTuvaCiSOizO_hwCVtTTzzCMc7hF5qF-j2raA84VU6DCmUuRK6x01uoKjsxFNRLi1uWkq6LyX-JSGHmSxYJmL5MN-e903jkmFmTr49hxIs7-Wvv--R6IXTSj90Rf4XKazq4-n0FJR-ERcX5L8jW3m4rZp37R9XjObNUzwZIC-ITUfgXVUifUWS0q0Wkwoztop3_7NWScFx87lFISA; "
+    "at-acbin=Atza|gQACItysAwEBAncGg4LDPIo2HQ7SOCH0QaP-TeS46QlA0zbdZlbtVpvXq-dNjOuDn21UN_z4WIiCey75-X_bL5FJ_v9zpOGNMP1adjwzVAdEiKmE62lKarG_t9EV1mXqjsjossb6BjuFgvUI_U6oA6h2ogg9gkfMIS5GSCqwlMTCoCr9q453p82mOl8TeCRTXU8fkxJCmnldyMqUDdejN3NuJ0A-JnDBbhESzlVaROsF3-xqSlzTbSPnxWp1C0A3wWARYU-QGRasRBrLy0nj9bDwatLHCZSkOp_gxynNrHDsfa0tiB_JgiRhHCgnsvoGBpq6HHBe24FyF5MbVR1RtkdgaQsjFRLWLE2I-gXd9w4dtXlxwctqf0y6aP6LG-vnXtz5Q8gw88LH5sB7MV5o-ePEQw70qXM5hoq3rzSLn2e_qVYUATWYJOKotb3ExL8v5-n0EZIafDhlKbA4QbyrANvM1rd9zI1ahrAGyvpF-YGCNvtoHXuKWs4QYAY7s407TCNGkrycX25CCa8MuDqgrUwY5BWPTczX_IuhMdDzIY71YTZhQr9vnwJg0kaDPqExTxBnZWBA6H6DBC8ZyrpZLCCMTzQLDISYprMKr3f3wa5EynN3Lc6c3Y3RM4ceu3gvk0zxAOzSHCu0-LekHUeKC4HEIMKPCQ; "
+    "sess-at-acbin=QCBRw7fAA11gTy2PReYU77K3pLfGb3IgraeoD5i0wNc=; "
+    "session-id-time=2082787201l; "
+    "cwr_u=c755ecc2-ec02-4dd0-914c-09f798ec23f1; "
+    "amzn-app-ctxt=1.8%20%7B%22an%22%3A%22Amazon.com%22%2C%22av%22%3A%2232.18.0.300%22%2C%22xv%22%3A%221.16.0%22%2C%22os%22%3A%22Android%22%2C%22ov%22%3A%2216%22%2C%22cp%22%3A788760%2C%22uiv%22%3A4%2C%22ast%22%3A3%2C%22nal%22%3A%221%22%2C%22di%22%3A%7B%22pr%22%3A%22sky_in%22%2C%22md%22%3A%2223076RN4BI%22%2C%22v%22%3A%22sky%22%2C%22mf%22%3A%22Xiaomi%22%2C%22dsn%22%3A%220a40327f594b43318f2dbb3e25f4efe9%22%2C%22dti%22%3A%22A1MPSLFC7L5AFK%22%2C%22ca%22%3A%22Jio%20True5G%22%2C%22ct%22%3A%22MOBILE%22%2C%22mct%22%3A20%7D%2C%22dm%22%3A%7B%22w%22%3A1080%2C%22h%22%3A2460%2C%22ld%22%3A3%2C%22dx%22%3A397.56500244140625%2C%22dy%22%3A395.4679870605469%2C%22pt%22%3A0%2C%22pb%22%3A78%7D%2C%22is%22%3A%22com.android.vending%22%2C%22msd%22%3A%22.amazon.in%22%2C%22scc%22%3Anull%7D; "
+    "rxc=ANIaB287HWvoebdssDs; "
+    "session-token=8pZPYgmXM9I/1ErC7OhlxIz3YXhUimg+5tUmfcfRUXb/fFTv3rYoxV/InSBgtsow/lemJFdvsql/oiGAzhbMN7KbvR8GRqFO11Tv/WdK6uU220pk0oXQ4mj/xgUlmOzz9X4jt9ONJ1bWvkCRIewExvWdm2bMb1JQ3oC+gVQmxya29GTPF50sE6ZRz17WOSHAtM1sXoeJwT0q1FrQ1jBJH7CIQn86Hv0ut773WTmTUTy/KHgqHkQfB2HCEKJHEq5nv8PDs8qAOOJ3Xqw7XGQFbj6Ath8uhc16p74hZ5jEZQ3PeMknOuMNHQ"
+)
+AMZ_VPA_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Linux; Android 16; 23076RN4BI Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/154.0.8037.106 Mobile Safari/537.36",
+    "Accept": "application/json",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Content-Type": "application/json",
+    "sec-ch-ua-platform": '"Android"',
+    "sec-ch-ua": '"Chromium";v="154", "Android WebView";v="154", "Not A(Brand";v="99"',
+    "sec-ch-ua-mobile": "?1",
+    "origin": "https://www.amazon.in",
+    "x-requested-with": "in.amazon.mShop.android.shopping",
+    "sec-fetch-site": "same-origin",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-dest": "empty",
+    "referer": "https://www.amazon.in/",
+    "accept-language": "en-IN,en-US;q=0.9,en;q=0.8",
+    "priority": "u=1, i",
+    "Cookie": AMZ_VPA_COOKIE,
+}
+
 APEX_BASE = "https://apex.renewbuyinsurance.com"
 APEX_MOBILE = "9361046680"
 APEX_HEADERS = {
@@ -678,6 +713,7 @@ def root() -> dict[str, object]:
             "pk": "/api/pk?number=03359736848",
             "upi": "/api/upi?upi=test@ybl",
             "phone_to_upi": "/api/phone-to-upi?phone=7065202121",
+            "phone_to_vpa": "/api/phone-to-vpa?phone=7065202121",
             "vehicle": "/api/vehicle?rc=DL8CAF5030",
             "health": "/api/health",
         },
@@ -1357,6 +1393,52 @@ def phone_to_upi_get(phone: str = Query(..., min_length=10, max_length=15)) -> d
 @app.get("/api/num-to-upi", tags=["phone-upi"], include_in_schema=False)
 def num_to_upi_alias(phone: str = Query(..., min_length=10, max_length=15)) -> dict[str, object]:
     return _do_phone_to_vpa(phone)
+
+
+def _amz_phone_to_vpa(phone: str) -> dict[str, object]:
+    digits = re.sub(r"\D", "", phone or "")
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    if len(digits) != 10:
+        return {"status": "error", "message": "Invalid phone number (10 digits)."}
+    try:
+        r = requests.post(
+            AMZ_VPA_URL,
+            data=json.dumps({"recipientUPINumber": digits}),
+            headers=AMZ_VPA_HEADERS,
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        return {"status": "error", "message": f"Upstream request failed: {exc}"}
+    try:
+        body = r.json()
+    except ValueError:
+        return {"status": "error", "message": "Upstream session expired (non-JSON). Amazon cookie needs refresh."}
+    if not isinstance(body, dict):
+        return {"status": "error", "message": "Unexpected upstream shape"}
+    if not body.get("validVpa"):
+        return {"status": "error", "phone": digits, "message": "No VPA found for this number", "data": body}
+    return {
+        "status": "success",
+        "phone": digits,
+        "vpa": body.get("recipientVpa"),
+        "holder_name": body.get("recipientBankAccountName"),
+        "data": body,
+    }
+
+
+@app.get("/api/phone-to-vpa", tags=["phone-upi"])
+def phone_to_vpa_get(phone: str = Query(..., min_length=10, max_length=15)) -> dict[str, object]:
+    """Phone number to VPA via Amazon verify-vpa."""
+    return _amz_phone_to_vpa(phone)
+
+
+@app.post("/api/phone-to-vpa", tags=["phone-upi"])
+def phone_to_vpa_post(body: dict[str, object]) -> dict[str, object]:
+    phone = str(body.get("phone") or body.get("mobile") or body.get("number") or "").strip()
+    if not phone:
+        return {"status": "error", "message": "Missing 'phone' in JSON body"}
+    return _amz_phone_to_vpa(phone)
 
 @app.post("/api/phone-to-upi", tags=["phone-upi"])
 def phone_to_upi_post(body: dict[str, object]) -> dict[str, object]:
