@@ -106,7 +106,7 @@ PB_SECRET = "SECRET-HZ07QRWY-JIBT-XRMQ-ZP95-J0RWP3DYRACW"
 PB_CLIENT = "CLIENT-CNTP6NYE-CU9N-DUZW-CSPI-SH1IS4DOVHB9"
 PB_SOURCE = "policyboss-1.5.6.1"
 PB_SS_ID = 208300
-PB_SESSION = "-zdyy5h45Eh8je93xjq2wwz6Dd22jqUk"
+PB_SESSION = ""
 PB_HEADERS = {
     "Host": "horizon.policyboss.com:5443",
     "User-Agent": "Mozilla/5.0 (Linux; Android 16; 23076RN4BI Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/154.0.8037.106 Mobile Safari/537.36",
@@ -1060,6 +1060,8 @@ def policyboss_lookup(
         return {"status": "error", "message": "Unexpected upstream shape"}
     if body.get("Msg") == "Not Authorized":
         return {"status": "error", "message": "Upstream not authorized. Keys/session need refresh."}
+    if isinstance(body.get("Msg"), str) and "session expired" in body["Msg"].lower():
+        return {"status": "error", "message": "Upstream session expired. Session needs refresh."}
     return {"status": "success", "number": norm, "data": body}
 
 
