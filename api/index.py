@@ -9,6 +9,7 @@ Docs panel: GET /docs (Swagger UI)
 from __future__ import annotations
 
 import base64
+import datetime
 import random
 import json
 import re
@@ -21,7 +22,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from curl_cffi import requests as curl_req
-from Crypto.Cipher import AES
+from Crypto.Cipher import AES, PKCS1_v1_5
+from Crypto.PublicKey import RSA
 from Crypto.Util.Padding import pad, unpad
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -160,6 +162,128 @@ AMZ_VPA_HEADERS = {
     "priority": "u=1, i",
     "Cookie": AMZ_VPA_COOKIE,
 }
+
+# --- icici lombard RC -> info (self-generated token, no hardcoded session) ---
+ICICI_BASE = "https://www.icicilombard.com/digital/v2.0"
+ICICI_INIT_PAYLOAD = {"Client": "website", "Scope": "MvImfz1HGC4UzIbv6oQT4UvKT83p"}
+ICICI_CRYPTO_KEY = b"7080808080808083"
+ICICI_CRYPTO_IV = b"9080808080808083"
+ICICI_PUB_PEM = """-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqJB60iVd+Thl+P5+Ore0
+abr7Ae+ANK+9jCj7UbYyXNSIbP6g3QMd4LhAAojln4VZRgpSBKjZ8YBc1yGgb516
+BOzfOBeqN4WtwN764UwFCyMaF0nA50BnjcMfGKLPvmhAbeRtaG06GtLhbAS9z57N
+QdEXivHzlRZJehzf7IHcpIUUDXKcaXe2/dHkAGk2zLhdrY9VErAxVj1g39qMNSvA
+JlrVT+heuR3MWwdle9KNgVFgg7AXybBhorb9GIuMsQS6UTxA/HIvSZUqAetDRfgG
+hTCss9Kq6EqJV92u4AiOIngstIOA3seLWx48N4xR0jfmZZElwlJIHeedgWxDsEN4
+/wIDAQAB
+-----END PUBLIC KEY-----"""
+ICICI_UA = ("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/154.0.0.0 Mobile Safari/537.36")
+_icici_token_cache: dict[str, object] = {"value": "", "exp": 0.0}
+_icici_lock = threading.Lock()
+
+
+def _icici_aes_b64(plain: str, key: bytes, iv: bytes) -> str:
+    c = AES.new(key[:16], AES.MODE_CBC, iv[:16])
+    return base64.b64encode(c.encrypt(pad(plain.encode("utf-8"), 16))).decode()
+
+
+def _icici_kv() -> str:
+    out = []
+    for ch in "xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx":
+        if ch in "xy":
+            r = random.randint(0, 15)
+            out.append(format(r if ch == "x" else (r & 3 | 8), "x"))
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _icici_rsa_kv(kv: str) -> str:
+    cipher = PKCS1_v1_5.new(RSA.import_key(ICICI_PUB_PEM))
+    return base64.b64encode(cipher.encrypt(kv.encode())).decode()
+
+
+def _icici_binding() -> str:
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return _icici_aes_b64(f"1|{ts}", ICICI_CRYPTO_KEY, ICICI_CRYPTO_IV)
+
+
+def _icici_headers(token: str | None, kv: str) -> dict[str, str]:
+    return {
+        "User-Agent": ICICI_UA,
+        "Accept": "application/json, text/plain, */*",
+        "content-type": "application/json",
+        "authorization": f"Bearer {token}" if token else "Bearer",
+        "kv": _icici_rsa_kv(kv),
+        "apibinding": _icici_binding(),
+        "clientipaddress": "2405:204:e187:d206",
+        "deviceid": "d1234",
+        "efid": "true",
+        "gclid": "",
+        "version": "v6.1.1",
+        "origin": "https://www.icicilombard.com",
+        "referer": "https://www.icicilombard.com/motor-insurance/car-insurance",
+    }
+
+
+def _icici_enc_body(obj: dict[str, object], kv: str) -> str:
+    plain = json.dumps(obj, separators=(",", ":"))
+    ct = _icici_aes_b64(plain, kv[:16].encode(), kv[16:32].encode())
+    return json.dumps({"msg": "e01" + ct}, separators=(",", ":"))
+
+
+def _icici_token() -> str:
+    with _icici_lock:
+        tok = _icici_token_cache
+        if tok["value"] and float(tok["exp"]) > time.time() + 60:
+            return str(tok["value"])
+        kv = _icici_kv()
+        r = requests.post(
+            f"{ICICI_BASE}/auth-api/client/initialize",
+            headers=_icici_headers(None, kv),
+            data=_icici_enc_body(ICICI_INIT_PAYLOAD, kv),
+            timeout=TIMEOUT,
+        )
+        r.raise_for_status()
+        body = r.json()
+        if not body.get("Passcode"):
+            raise RuntimeError(f"Token init failed: {str(body)[:200]}")
+        tok["value"] = body["Passcode"]
+        try:
+            exp = datetime.datetime.fromisoformat(str(body.get("Expiry")).replace("Z", "+00:00")).timestamp()
+        except Exception:
+            exp = time.time() + 3600
+        tok["exp"] = exp
+        return str(tok["value"])
+
+
+def _icici_rc_lookup(reg: str) -> dict[str, object]:
+    norm = re.sub(r"[\s-]", "", reg.strip()).upper()
+    if len(norm) < 6:
+        return {"status": "error", "message": "Invalid vehicle registration number"}
+    try:
+        token = _icici_token()
+    except Exception as exc:
+        return {"status": "error", "message": f"Token init failed: {exc}"}
+    kv = _icici_kv()
+    try:
+        r = requests.post(
+            f"{ICICI_BASE}/car-quote-api/RcDetails",
+            headers=_icici_headers(token, kv),
+            data=_icici_enc_body({"RegistrationNumber": norm}, kv),
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        return {"status": "error", "message": f"Upstream request failed: {exc}"}
+    try:
+        body = r.json()
+    except ValueError:
+        return {"status": "error", "message": f"Upstream non-JSON (HTTP {r.status_code})"}
+    if not isinstance(body, dict) or not (body.get("Success") or body.get("MakeName")):
+        msg = body.get("DisplayMessage") if isinstance(body, dict) else None
+        return {"status": "error", "number": norm, "message": msg or "No data found", "data": body}
+    return {"status": "success", "number": norm, "data": body}
 
 # --- eyecon number -> name ---
 EYECON_URL = "https://api.eyecon-app.com/app/getnames.jsp"
@@ -732,6 +856,7 @@ def root() -> dict[str, object]:
             "pan": "/api/pan?pan=AXDPR2606K",
             "spinny_pan": "/api/spinny-pan?pan=BBGPP5787F",
             "rc_lookup": "/api/rc-lookup?rc=DL-2C-AF-4984",
+            "icici_rc": "/api/icici-rc?number=MH16BZ7090",
             "policyboss": "/api/policyboss?number=MH16BZ7090",
             "instagram": "/api/instagram?username=grindtoprime",
             "pk": "/api/pk?number=03359736848",
@@ -1021,6 +1146,20 @@ def apex_rc_lookup(rc: str = Query(..., min_length=6, max_length=20), mobile_no:
 @app.get("/api/apex-rc", tags=["vehicle"], include_in_schema=False)
 def apex_rc_alias(rc: str = Query(..., min_length=6, max_length=20), mobile_no: str = APEX_MOBILE) -> dict[str, object]:
     return _apex_lookup(rc, mobile_no)
+
+
+@app.get("/api/icici-rc", tags=["vehicle"])
+def icici_rc_get(number: str = Query(..., min_length=6, max_length=20)) -> dict[str, object]:
+    """ICICI Lombard RC lookup (self-issued token, raw fields)."""
+    return _icici_rc_lookup(number)
+
+
+@app.post("/api/icici-rc", tags=["vehicle"])
+def icici_rc_post(body: dict[str, object]) -> dict[str, object]:
+    number = str(body.get("number") or body.get("rc") or "").strip()
+    if not number:
+        return {"status": "error", "message": "Missing 'number' in JSON body"}
+    return _icici_rc_lookup(number)
 
 
 @app.get("/api/policyboss", tags=["vehicle"])
