@@ -279,7 +279,7 @@ def _icici_rc_lookup(reg: str) -> dict[str, object]:
     try:
         body = r.json()
     except ValueError:
-        return {"status": "error", "message": f"Upstream non-JSON (HTTP {r.status_code})"}
+        return {"status": "error", "number": norm, "message": f"Upstream non-JSON (HTTP {r.status_code}): {r.text[:200]}"}
     if not isinstance(body, dict) or not (body.get("Success") or body.get("MakeName")):
         msg = body.get("DisplayMessage") if isinstance(body, dict) else None
         return {"status": "error", "number": norm, "message": msg or "No data found", "data": body}
